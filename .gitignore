@@ -11,8 +11,10 @@ test.py
 test2.py
 *.pem
 *.txt
+*.xlsx
 # C extensions
 *.so
+
 
 # Distribution / packaging
 .Python

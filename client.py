@@ -1,5 +1,6 @@
 import socket
 import rsa
+from classes import socket_conn
 
 server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 1541179669992532483914203150651172352438303321820385084467843592008121891579
@@ -14,10 +15,17 @@ server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 HOST = '127.0.0.1'  # The server's hostname or IP address
 PORT = 65432        # The port used by the server
 
+# client_crypto = cryptography(server_pubkey = server_pubkey)
+# client_socket = socket()
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     print('hello')
-    s.sendall(b'Hello, world')
-    data = s.recv(1024)
+    client_socket = socket_conn(conn = s , server_pubkey = server_pubkey)
+    client_socket.send_session_key()
+    # print(client_socket.session_key)
+    print(client_socket.base64_encode(client_socket.session_key))
+    # s.sendall(b'Hello, world')
+    # data = s.recv(1024)
 
-print('Received', data.decode())
+# print('Received', data.decode())
