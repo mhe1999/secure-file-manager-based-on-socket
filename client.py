@@ -24,8 +24,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print('hello')
     client_socket = socket_conn(conn = s , server_pubkey = server_pubkey)
     client_socket.send_session_key()
-    print(client_socket.base64_encode(client_socket.session_key))
-    client_socket.send_register(uname = 'abc',
-                                password = 'def',
-                                conf_label = '1',
-                                integrity_label = '2')
+    print(client_socket.base64_encode(client_socket.session_key), '\n\n')
+    msg = input('enter \n')
+    client_socket.send_message_handler(msg)

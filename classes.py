@@ -5,7 +5,6 @@ import base64
 from Crypto.Cipher import AES
 
 
-
 class cryptography():
     def __init__(self, server_pubkey):
         self.server_pubkey = server_pubkey
@@ -59,6 +58,7 @@ class socket_conn(cryptography):
         session_key_json = json.dumps(session_key_dic)
         session_key_json_encrytped_RSA = self.encrypt_RSA(session_key_json, key=self.server_pubkey)
         # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
+        print(self.base64_encode(session_key_json_encrytped_RSA),'\n\n')
         self.conn.sendall(session_key_json_encrytped_RSA)
 
     def recieve_session_key(self, session_key_json_encrytped_RSA):
@@ -85,22 +85,112 @@ class socket_conn(cryptography):
         message = self.decrypt_AES(encrypted_message, nonce) # message = {'type' : login, ...} --- json
         self.recieve_message_handler(message)
 
+    def send_message_handler(self, message):
+        message_array = message.split()
+        type = message_array[0]
+        if type == 'register':
+            self.send_register_command(unmae = message_array[1],
+                                       password = message_array[2],
+                                       conf_label = message_array[3],
+                                       integrity_label = message_array[4])
+
+        elif type == 'login':
+            self.send_login_command(   unmae = message_array[1],
+                                       password = message_array[2])
+
+        elif type == 'put':
+            self.send_put_command(     filename = message_array[1],
+                                       conf_label = message_array[3],
+                                       integrity_label = message_array[4])
+
+        elif type == 'read':
+            self.send_read_command(    filename = message_array[1])
+
+        elif type == 'write':
+            self.send_write_command(   filename = message_array[1],
+                                       content = message_array[3])
+
+        elif type == 'get':
+            self.send_get_command(    filename = message_array[1])
+
+        else:
+            print('not valid input')
+
     def recieve_message_handler(self, message_json): # message_json = {'type' : login, ...} ---> json
         message = json.loads(message_json)  # message = {'type' : login, ...} ---> dict
         if message['type'] == 'register':
             self.handle_register_command()
+        elif message['type'] == 'login':
+            self.handle_login_command()
+        elif message['type'] == 'put':
+            self.handle_put_command()
+        elif message['type'] == 'read':
+            self.handle_read_command()
+        elif message['type'] == 'write':
+            self.handle_write_command()
+        elif message['type'] == 'get':
+            self.handle_get_command()
         else:
             print('not vaild')
 
     def handle_register_command(self):
         print('in register')
 
-    def send_register(self, uname, password, conf_label, integrity_label):
-        dic_message = {'type' : 'registe',
+    def handle_login_command(self):
+        print('in login')
+
+    def handle_put_command(self):
+        print('in put')
+
+    def handle_read_command(self):
+        print('in read')
+
+    def handle_write_command(self):
+        print('in write')
+
+    def handle_get_command(self):
+        print('in get')
+
+    def send_register_command(self, uname, password, conf_label, integrity_label):
+        dic_message = {'type' : 'register',
                        'uname' : uname,
                        'password' : password,
                        'conf_label' : conf_label,
                        'integrity_label' : integrity_label}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
+    def send_login_command(self, uname, password):
+        dic_message = {'type' : 'login',
+                       'uname' : uname,
+                       'password' : password}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
+    def send_put_command(self, filename, conf_label, integrity_label):
+        dic_message = {'type' : 'put',
+                       'filename' : filename,
+                       'conf_label' : conf_label,
+                       'integrity_label' : integrity_label}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
+    def send_read_command(self, filename):
+        dic_message = {'type' : 'read',
+                       'filename' : filename}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
+    def send_write_command(self, filename, content):
+        dic_message = {'type' : 'write',
+                       'filename' : filename,
+                       'content' : content}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
+    def send_get_command(self, filename):
+        dic_message = {'type' : 'get',
+                       'filename' : filename}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
@@ -121,10 +211,10 @@ class files():
 # TODO: calculate session key CHECK
 # TODO: send session key CHECK
 # TODO: recieve session key CHECK
-# TODO: encryption text
-# TODO: decryption text
-# TODO: send message
-# TODO: recieve message
+# TODO: encryption text CHECK
+# TODO: decryption text CHECK
+# TODO: send message CHECK
+# TODO: recieve message CHECK
 # TODO: encryption file
 # TODO: decryption file
 # TODO: send file

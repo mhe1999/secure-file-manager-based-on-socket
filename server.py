@@ -50,11 +50,14 @@ def on_new_client(clientsocket):
     # dec = rsa.decrypt(enc, server_privkey).decode()
     # print(dec)
     while True:
-        msg = clientsocket.recv(1024)
+        msg = clientsocket.recv(4096)
         # msg = 'hello world'.encode()
+        print(server_socket.base64_encode(msg))
+
         server_socket.recieve_session_key(msg)
         print(server_socket.base64_encode(server_socket.session_key))
-        msg = clientsocket.recv(1024)
+        msg = clientsocket.recv(4096)
+        print(msg, 'hey')
         server_socket.recieve_message(msg)
         break
     clientsocket.close()
