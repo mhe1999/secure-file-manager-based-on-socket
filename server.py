@@ -2,7 +2,7 @@ import socket
 import _thread
 import rsa
 from classes import server
-
+import os
 server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 1541179669992532483914203150651172352438303321820385084467843592008121891579
 5243744623899403024070535464953327207745707280816151149112673681159838326052
@@ -35,7 +35,7 @@ server_privkey = rsa.PrivateKey(int('''1987105457280428302534996355018419873
 4425081479600258263089774445317483636496920501061180145137619292510002398336
 5332694529510059553458106009614528640071676879428593622444913338231690653268
 98889436935333334802409677204366469098956516562077466352927879748264377'''.replace('\n','')),
-int(''' 91742353358286186879954211373295269340311584242374929055287051742022
+int('''91742353358286186879954211373295269340311584242374929055287051742022
 0736763091873097644996850939292048249256703492364894297992748025257126924381
 9509884481494194910689757882715889152269263940976025398257968300594440519841
 640583295586382361005225512629383144758989360820455721364042654072969'''.replace('\n','')))
@@ -44,10 +44,18 @@ def on_new_client(clientsocket):
     server_socket = server(conn = clientsocket,
                            server_pubkey = server_pubkey,
                            server_privkey = server_privkey)
+    # msg = 'hello world'
+    # enc = rsa.encrypt(msg.encode(), server_pubkey)
+    # print(enc)
+    # dec = rsa.decrypt(enc, server_privkey).decode()
+    # print(dec)
     while True:
         msg = clientsocket.recv(1024)
-        d = server_socket.recieve_session_key(msg)
-        print(server_socket.base64_encode(d))
+        # msg = 'hello world'.encode()
+        server_socket.recieve_session_key(msg)
+        print(server_socket.base64_encode(server_socket.session_key))
+        msg = clientsocket.recv(1024)
+        server_socket.recieve_message(msg)
         break
     clientsocket.close()
 

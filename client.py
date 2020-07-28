@@ -2,6 +2,7 @@ import socket
 import rsa
 from classes import socket_conn
 
+
 server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 1541179669992532483914203150651172352438303321820385084467843592008121891579
 5243744623899403024070535464953327207745707280816151149112673681159838326052
@@ -23,9 +24,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print('hello')
     client_socket = socket_conn(conn = s , server_pubkey = server_pubkey)
     client_socket.send_session_key()
-    # print(client_socket.session_key)
     print(client_socket.base64_encode(client_socket.session_key))
-    # s.sendall(b'Hello, world')
-    # data = s.recv(1024)
-
-# print('Received', data.decode())
+    client_socket.send_register(uname = 'abc',
+                                password = 'def',
+                                conf_label = '1',
+                                integrity_label = '2')

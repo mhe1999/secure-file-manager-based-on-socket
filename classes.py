@@ -2,17 +2,11 @@ import os
 import rsa
 import json
 import base64
+from Crypto.Cipher import AES
 
-class clients():
-    pass
 
-class files():
-    pass
 
-class AES_cryptography():
-    pass
-
-class RSA_cryptography():
+class cryptography():
     def __init__(self, server_pubkey):
         self.server_pubkey = server_pubkey
 
@@ -26,10 +20,23 @@ class RSA_cryptography():
         self.session_key = os.urandom(32)
         return self.session_key   # returns a 256 bit 'byte' type
 
-    def establish_session_key(self, server_pubkey):
-        self.session_key = self.create_session_key()
-        socket.send_session_key(session_key = self.session_key,
-                                server_pubkey=server_pubkey)
+    # def establish_session_key(self, server_pubkey):
+    #     self.session_key = self.create_session_key()
+    #     socket.send_session_key(session_key = self.session_key,
+    #                             server_pubkey=server_pubkey)
+
+    def encrypt_AES(self, plaintext):
+        cipher = AES.new(self.session_key,AES.MODE_EAX)
+        nonce = cipher.nonce
+        ciphertext, tag = cipher.encrypt_and_digest(plaintext.encode()) # encryte data
+        return ciphertext, nonce
+
+    def decrypt_AES(self, message_bytes, nonce):
+        print('decrypting data...')
+        cipher = AES.new(self.session_key, AES.MODE_EAX, nonce=nonce)
+        plaintext = cipher.decrypt(message_bytes)               # decrype message with session key and nonce
+        plaintext = plaintext.decode()
+        return plaintext
 
     def base64_encode(self, message_bytes):
         base64_bytes = base64.b64encode(message_bytes)
@@ -41,32 +48,73 @@ class RSA_cryptography():
         message_bytes = base64.b64decode(base64_bytes)
         return message_bytes
 
-
-class socket_conn(RSA_cryptography):
+class socket_conn(cryptography):
     def __init__(self, conn, server_pubkey):
         super().__init__(server_pubkey = server_pubkey)
         self.conn = conn
 
-    def send_message(message): # message should be byte type
-        self.conn.sendall(message)
-
     def send_session_key(self):
         self.create_session_key()
-        session_key_dic = {'set' : 'session_key', 'value' : self.base64_encode(self.session_key)}
+        session_key_dic = {'type' : 'session_key', 'value' : self.base64_encode(self.session_key)}
         session_key_json = json.dumps(session_key_dic)
         session_key_json_encrytped_RSA = self.encrypt_RSA(session_key_json, key=self.server_pubkey)
+        # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
         self.conn.sendall(session_key_json_encrytped_RSA)
 
     def recieve_session_key(self, session_key_json_encrytped_RSA):
+        # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
         session_key_json = self.decrypt_RSA(session_key_json_encrytped_RSA, key = self.server_privkey)
         session_key_dic = json.loads(session_key_json)
-        return self.base64_decode(session_key_dic['value'])
+        self.session_key = self.base64_decode(session_key_dic['value'])
+
+    def send_message(self, message, **kwargs):
+        encrypted_message, nonce = self.encrypt_AES(message)
+        encrypted_message_base64 = self.base64_encode(encrypted_message)
+        nonce_base64 = self.base64_encode(nonce)
+        encrypted_message_dic = {'encrypted_message' : encrypted_message_base64 ,
+                                  'nonce' : nonce_base64}
+        encrypted_message_json = json.dumps(encrypted_message_dic)
+        self.conn.sendall(encrypted_message_json.encode())
+
+    def recieve_message(self, encrypted_message_json):
+        message_json = json.loads(encrypted_message_json.decode())  # message_json = {'encrypted_message' : aksdlbfvmnsznasfdfb, 'nonce' : mnfmq}
+        encrypted_message_base64 = message_json['encrypted_message']
+        nonce_base64 = message_json['nonce']
+        encrypted_message = self.base64_decode(encrypted_message_base64)
+        nonce = self.base64_decode(nonce_base64)
+        message = self.decrypt_AES(encrypted_message, nonce) # message = {'type' : login, ...} --- json
+        self.recieve_message_handler(message)
+
+    def recieve_message_handler(self, message_json): # message_json = {'type' : login, ...} ---> json
+        message = json.loads(message_json)  # message = {'type' : login, ...} ---> dict
+        if message['type'] == 'register':
+            self.handle_register_command()
+        else:
+            print('not vaild')
+
+    def handle_register_command(self):
+        print('in register')
+
+    def send_register(self, uname, password, conf_label, integrity_label):
+        dic_message = {'type' : 'registe',
+                       'uname' : uname,
+                       'password' : password,
+                       'conf_label' : conf_label,
+                       'integrity_label' : integrity_label}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
 
 class server(socket_conn):
     def __init__(self, conn, server_pubkey, server_privkey):
         super().__init__(conn, server_pubkey)
         self.server_privkey = server_privkey
 
+
+class clients():
+    pass
+
+class files():
+    pass
 
 
 
