@@ -128,7 +128,7 @@ class socket_conn(cryptography):
                                        integrity_label = message_array[4])
 
         elif type == 'login':
-            self.send_login_command(   unmae = message_array[1],
+            self.send_login_command(   uname = message_array[1],
                                        password = message_array[2])
 
         elif type == 'put':
@@ -247,7 +247,7 @@ class server(socket_conn):
         password = message['password'] + salt # returns a string of password + salt
         conf_label = int(message['conf_label'])
         integrity_label = int(message['integrity_label'])
-        if self.check_uname(uname) and self.check_pass(password):
+        if self.check_uname(uname) and self.check_pass_register(password):
             self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, last_attempt)
                                             VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,NULL ,NULL)""",
                                             {'uname' : uname, 'password' : password , 'salt' : salt, 'conf_label' : conf_label , 'integ_label' : integrity_label})
@@ -257,6 +257,12 @@ class server(socket_conn):
 
     def handle_login_command(self, message):
         print('in login')
+        uname = message['uname']
+        password = message['password']
+        if self.check_pass_login(uname, password):
+            print('login successfully')
+        else:
+            print('unsuccess')
 
     def handle_put_command(self, message):
         print('in put')
@@ -278,13 +284,23 @@ class server(socket_conn):
         else:
             return False
 
-    def check_pass(self, password):
+    def check_pass_register(self, password):
         if len(password) < 8:
             return False
         else:
             return True
 
+    def check_pass_login(self, uname, password):
+        # self.cursor.execute("SELECT salt FROM users WHERE uname = %(uname)s" , {'uname' : uname})
+        self.cursor.execute(""" SELECT ID
+                                FROM users
+                                WHERE uname = %(uname)s AND sha2(CONCAT(%(password)s, salt), 256) = pass_hash""" , {'uname' : uname, 'password' : password})
 
+        user_table = self.cursor.fetchall()
+        if len(user_table):
+            return True
+        else:
+            return False
 
 class clients():
     pass
@@ -311,8 +327,8 @@ class files():
 # TODO: calculate hash CHECK
 # TODO: check hash CHECK
 # TODO: hash passwords CHECK
-# TODO: register
-# TODO: login
+# TODO: register CHECK
+# TODO: login CHECk
 # TODO: put
 # TODO: read
 # TODO: write
