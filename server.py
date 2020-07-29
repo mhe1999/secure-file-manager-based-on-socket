@@ -56,9 +56,10 @@ def on_new_client(clientsocket):
 
         server_socket.recieve_session_key(msg)
         print(server_socket.base64_encode(server_socket.session_key))
-        msg = clientsocket.recv(4096)
-        print(msg, 'hey')
-        server_socket.recieve_message(msg)
+        # msg = clientsocket.recv(4096)
+        # print(msg, 'hey')
+        # server_socket.recieve_message(msg)
+        server_socket.recieve_file('text1.txt')
         break
     clientsocket.close()
 

@@ -19,11 +19,6 @@ class cryptography():
         self.session_key = os.urandom(32)
         return self.session_key   # returns a 256 bit 'byte' type
 
-    # def establish_session_key(self, server_pubkey):
-    #     self.session_key = self.create_session_key()
-    #     socket.send_session_key(session_key = self.session_key,
-    #                             server_pubkey=server_pubkey)
-
     def encrypt_AES(self, plaintext):
         cipher = AES.new(self.session_key,AES.MODE_EAX)
         nonce = cipher.nonce
@@ -47,6 +42,7 @@ class cryptography():
         message_bytes = base64.b64decode(base64_bytes)
         return message_bytes
 
+
 class socket_conn(cryptography):
     def __init__(self, conn, server_pubkey):
         super().__init__(server_pubkey = server_pubkey)
@@ -66,6 +62,46 @@ class socket_conn(cryptography):
         session_key_json = self.decrypt_RSA(session_key_json_encrytped_RSA, key = self.server_privkey)
         session_key_dic = json.loads(session_key_json)
         self.session_key = self.base64_decode(session_key_dic['value'])
+
+    def encrypt_file_AES(self, message):
+        cipher = AES.new(self.session_key,AES.MODE_EAX)
+        nonce = cipher.nonce
+        cipherfile, tag = cipher.encrypt_and_digest(message) # encryte data
+        return cipherfile, nonce
+
+    def decrypt_file_AES(self, cipherfile, nonce):
+        print('decrypting file...')
+        cipher = AES.new(self.session_key, AES.MODE_EAX, nonce=nonce)
+        message = cipher.decrypt(cipherfile)               # decrype message with session key and nonce
+        # message_json = message_json
+        return message
+
+    def send_file(self, file_name):
+        f = open(file_name, 'rb')
+        l = f.read()
+        cipherfile, nonce = self.encrypt_file_AES(l)
+        cipherfile_base64 = self.base64_encode(cipherfile)
+        nonce_base64 = self.base64_encode(nonce)
+        message_dic = {'cipherfile' : cipherfile_base64,
+                       'nonce' : nonce_base64}
+        message_json = json.dumps(message_dic)
+        self.conn.sendall(message_json.encode())
+
+    def recieve_file(self, file_name):
+        file = open(file_name, 'wb')
+        message_json = bytes()
+        while True:
+            data = self.conn.recv(1024)
+            if not data:
+                break
+            message_json += data
+        message_dic = json.loads(message_json)
+        cipherfile_base64 = message_dic['cipherfile']
+        nonce_base64 = message_dic['nonce']
+        cipherfile = self.base64_decode(cipherfile_base64)
+        nonce = self.base64_decode(nonce_base64)
+        message = self.decrypt_file_AES(cipherfile, nonce)
+        file.write(message)
 
     def send_message(self, message, **kwargs):
         encrypted_message, nonce = self.encrypt_AES(message)
@@ -194,6 +230,7 @@ class socket_conn(cryptography):
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
+
 class server(socket_conn):
     def __init__(self, conn, server_pubkey, server_privkey):
         super().__init__(conn, server_pubkey)
@@ -215,11 +252,17 @@ class files():
 # TODO: decryption text CHECK
 # TODO: send message CHECK
 # TODO: recieve message CHECK
+# TODO: base64 encode CHECk
+# TODO: base64 decode CHECK
 # TODO: encryption file
 # TODO: decryption file
 # TODO: send file
 # TODO: recieve file
 # TODO: create database
+# TODO: calculate hash
+# TODO: check hash
+# TODO: weak password
+# TODO: hash passwords
 # TODO: register
 # TODO: login
 # TODO: put
@@ -228,12 +271,6 @@ class files():
 # TODO: get
 # TODO: BLP
 # TODO: Biba
-# TODO: calculate hash
-# TODO: check hash
-# TODO: weak password
-# TODO: base64 encode
-# TODO: base64 decode
-# TODO: hash passwords
 # TODO: backoff
 # TODO: logging
 # TODO: analyse logs
