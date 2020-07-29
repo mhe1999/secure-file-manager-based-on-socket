@@ -119,7 +119,7 @@ class socket_conn(cryptography):
         self.recieve_message_handler(message)
 
     def send_message_handler(self, message):
-        message_array = message.split()
+        message_array = message.split() # FIXME: file names with space
         type = message_array[0]
         if type == 'register':
             self.send_register_command(uname = message_array[1],
@@ -133,15 +133,15 @@ class socket_conn(cryptography):
 
         elif type == 'put':
             self.send_put_command(     filename = message_array[1],
-                                       conf_label = message_array[3],
-                                       integrity_label = message_array[4])
+                                       conf_label = message_array[2],
+                                       integrity_label = message_array[3])
 
         elif type == 'read':
             self.send_read_command(    filename = message_array[1])
 
         elif type == 'write':
             self.send_write_command(   filename = message_array[1],
-                                       content = message_array[3])
+                                       content = message_array[2])
 
         elif type == 'get':
             self.send_get_command(    filename = message_array[1])
@@ -166,10 +166,13 @@ class socket_conn(cryptography):
         self.send_message(json_message)
 
     def send_put_command(self, filename, conf_label, integrity_label):
+        file = open(filename, 'rb')
+        content = self.base64_encode(file.read())
         dic_message = {'type' : 'put',
                        'filename' : filename,
                        'conf_label' : conf_label,
-                       'integrity_label' : integrity_label}
+                       'integrity_label' : integrity_label,
+                       'file' : content}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
@@ -261,11 +264,18 @@ class server(socket_conn):
         password = message['password']
         if self.check_pass_login(uname, password):
             print('login successfully')
+            print(self.user_id)
         else:
             print('unsuccess')
 
     def handle_put_command(self, message):
         print('in put')
+        if self.check_file_name(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1]): # FIXME: file name without .txt
+            file = open(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1], 'wb')
+            file.write(self.base64_decode(message['file']))
+            self.add_file_to_database(message)
+        else:
+            print('duplicate name of file')
 
     def handle_read_command(self, message):
         print('in read')
@@ -298,9 +308,32 @@ class server(socket_conn):
 
         user_table = self.cursor.fetchall()
         if len(user_table):
+            self.user_id = user_table[0][0]
             return True
         else:
             return False
+
+    def check_file_name(self, fname):
+        self.cursor.execute(""" SELECT ID
+                                FROM files
+                                WHERE fname = %(fname)s""" , {'fname' : fname})
+
+
+        file_table = self.cursor.fetchall()
+        if len(file_table):
+            return False
+        else:
+            return True
+
+    def add_file_to_database(self, message):
+        fname = message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1]
+        conf_label = int(message['conf_label'])
+        integ_label = int(message['integrity_label'])
+        owner_id = 4 # FIXME: owner_id = self.user_id
+        self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID)
+                                VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s)""",
+                                {'fname' : fname, 'conf_label' : conf_label , 'integ_label' : integ_label, 'owner_id' : owner_id})
+        self.mydb.commit()
 
 class clients():
     pass
@@ -310,25 +343,25 @@ class files():
 
 
 
-# TODO: calculate session key CHECK
-# TODO: send session key CHECK
-# TODO: recieve session key CHECK
-# TODO: encryption text CHECK
-# TODO: decryption text CHECK
-# TODO: send message CHECK
-# TODO: recieve message CHECK
-# TODO: base64 encode CHECk
-# TODO: base64 decode CHECK
-# TODO: encryption file CHECK
-# TODO: decryption file CHECK
-# TODO: send file CHECK
-# TODO: recieve file CHECL
-# TODO: create database CHECK
-# TODO: calculate hash CHECK
-# TODO: check hash CHECK
-# TODO: hash passwords CHECK
-# TODO: register CHECK
-# TODO: login CHECk
+# TODO: calculate session key   CHECK
+# TODO: send session key        CHECK
+# TODO: recieve session key     CHECK
+# TODO: encryption text         CHECK
+# TODO: decryption text         CHECK
+# TODO: send message            CHECK
+# TODO: recieve message         CHECK
+# TODO: base64 encode           CHECk
+# TODO: base64 decode           CHECK
+# TODO: encryption file         CHECK
+# TODO: decryption file         CHECK
+# TODO: send file               CHECK
+# TODO: recieve file            CHECL
+# TODO: create database         CHECK
+# TODO: calculate hash          CHECK
+# TODO: check hash              CHECK
+# TODO: hash passwords          CHECK
+# TODO: register                CHECK
+# TODO: login                   CHECk
 # TODO: put
 # TODO: read
 # TODO: write

@@ -56,8 +56,13 @@ def on_new_client(clientsocket):
 
         server_socket.recieve_session_key(msg)
         print(server_socket.base64_encode(server_socket.session_key))
-        msg = clientsocket.recv(4096)
-        # print(msg, 'hey')
+        msg = bytes()
+        while True:
+            data = clientsocket.recv(4096)
+            if not data:
+                break
+            msg += data
+
         server_socket.recieve_message(msg)
         # server_socket.recieve_file('text1.txt')
         # server_socket.database_connection()
