@@ -26,5 +26,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     client_socket.send_session_key()
     # print(client_socket.base64_encode(client_socket.session_key), '\n\n')
     msg = input('enter \n')
-    # client_socket.send_message_handler(msg)
-    client_socket.send_file('test.txt')
+    client_socket.send_message_handler(msg)
+    # client_socket.send_file('test.txt')

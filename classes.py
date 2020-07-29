@@ -3,6 +3,9 @@ import rsa
 import json
 import base64
 from Crypto.Cipher import AES
+import mysql.connector
+from mysql.connector import errorcode
+
 
 
 class cryptography():
@@ -32,6 +35,19 @@ class cryptography():
         plaintext = plaintext.decode()
         return plaintext
 
+    def encrypt_file_AES(self, message):
+        cipher = AES.new(self.session_key,AES.MODE_EAX)
+        nonce = cipher.nonce
+        cipherfile, tag = cipher.encrypt_and_digest(message) # encryte data
+        return cipherfile, nonce
+
+    def decrypt_file_AES(self, cipherfile, nonce):
+        print('decrypting file...')
+        cipher = AES.new(self.session_key, AES.MODE_EAX, nonce=nonce)
+        message = cipher.decrypt(cipherfile)               # decrype message with session key and nonce
+        # message_json = message_json
+        return message
+
     def base64_encode(self, message_bytes):
         base64_bytes = base64.b64encode(message_bytes)
         base64_message = base64_bytes.decode('ascii')
@@ -42,7 +58,7 @@ class cryptography():
         message_bytes = base64.b64decode(base64_bytes)
         return message_bytes
 
-
+#####################################################################################################################################################################
 class socket_conn(cryptography):
     def __init__(self, conn, server_pubkey):
         super().__init__(server_pubkey = server_pubkey)
@@ -56,25 +72,6 @@ class socket_conn(cryptography):
         # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
         print(self.base64_encode(session_key_json_encrytped_RSA),'\n\n')
         self.conn.sendall(session_key_json_encrytped_RSA)
-
-    def recieve_session_key(self, session_key_json_encrytped_RSA):
-        # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
-        session_key_json = self.decrypt_RSA(session_key_json_encrytped_RSA, key = self.server_privkey)
-        session_key_dic = json.loads(session_key_json)
-        self.session_key = self.base64_decode(session_key_dic['value'])
-
-    def encrypt_file_AES(self, message):
-        cipher = AES.new(self.session_key,AES.MODE_EAX)
-        nonce = cipher.nonce
-        cipherfile, tag = cipher.encrypt_and_digest(message) # encryte data
-        return cipherfile, nonce
-
-    def decrypt_file_AES(self, cipherfile, nonce):
-        print('decrypting file...')
-        cipher = AES.new(self.session_key, AES.MODE_EAX, nonce=nonce)
-        message = cipher.decrypt(cipherfile)               # decrype message with session key and nonce
-        # message_json = message_json
-        return message
 
     def send_file(self, file_name):
         f = open(file_name, 'rb')
@@ -113,8 +110,8 @@ class socket_conn(cryptography):
         self.conn.sendall(encrypted_message_json.encode())
 
     def recieve_message(self, encrypted_message_json):
-        message_json = json.loads(encrypted_message_json.decode())  # message_json = {'encrypted_message' : aksdlbfvmnsznasfdfb, 'nonce' : mnfmq}
-        encrypted_message_base64 = message_json['encrypted_message']
+        message_json = json.loads(encrypted_message_json.decode())    # message_json = {'encrypted_message' : aksdlbfvmnsznasfdfb,
+        encrypted_message_base64 = message_json['encrypted_message']  #                 'nonce' : mnfmq}
         nonce_base64 = message_json['nonce']
         encrypted_message = self.base64_decode(encrypted_message_base64)
         nonce = self.base64_decode(nonce_base64)
@@ -125,7 +122,7 @@ class socket_conn(cryptography):
         message_array = message.split()
         type = message_array[0]
         if type == 'register':
-            self.send_register_command(unmae = message_array[1],
+            self.send_register_command(uname = message_array[1],
                                        password = message_array[2],
                                        conf_label = message_array[3],
                                        integrity_label = message_array[4])
@@ -151,41 +148,6 @@ class socket_conn(cryptography):
 
         else:
             print('not valid input')
-
-    def recieve_message_handler(self, message_json): # message_json = {'type' : login, ...} ---> json
-        message = json.loads(message_json)  # message = {'type' : login, ...} ---> dict
-        if message['type'] == 'register':
-            self.handle_register_command()
-        elif message['type'] == 'login':
-            self.handle_login_command()
-        elif message['type'] == 'put':
-            self.handle_put_command()
-        elif message['type'] == 'read':
-            self.handle_read_command()
-        elif message['type'] == 'write':
-            self.handle_write_command()
-        elif message['type'] == 'get':
-            self.handle_get_command()
-        else:
-            print('not vaild')
-
-    def handle_register_command(self):
-        print('in register')
-
-    def handle_login_command(self):
-        print('in login')
-
-    def handle_put_command(self):
-        print('in put')
-
-    def handle_read_command(self):
-        print('in read')
-
-    def handle_write_command(self):
-        print('in write')
-
-    def handle_get_command(self):
-        print('in get')
 
     def send_register_command(self, uname, password, conf_label, integrity_label):
         dic_message = {'type' : 'register',
@@ -230,11 +192,98 @@ class socket_conn(cryptography):
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-
+##################################################################################################################################################################
 class server(socket_conn):
     def __init__(self, conn, server_pubkey, server_privkey):
         super().__init__(conn, server_pubkey)
         self.server_privkey = server_privkey
+        self.database_connection()
+
+    def database_connection(self):
+        try:
+            self.mydb = mysql.connector.connect(
+            host="localhost",
+            user="Mohammad",
+            password="1234",
+            database='file_manager'
+            )
+            self.cursor = self.mydb.cursor()
+        except mysql.connector.Error as err:
+          if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+          elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+          else:
+              print('an error')
+              print(err)
+
+    def recieve_session_key(self, session_key_json_encrytped_RSA):
+        # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
+        session_key_json = self.decrypt_RSA(session_key_json_encrytped_RSA, key = self.server_privkey)
+        session_key_dic = json.loads(session_key_json)
+        self.session_key = self.base64_decode(session_key_dic['value'])
+
+    def recieve_message_handler(self, message_json): # message_json = {'type' : login, ...} ---> json
+        message = json.loads(message_json)           # message = {'type' : login, ...} ---> dict
+        if message['type'] == 'register':
+            self.handle_register_command(message)
+        elif message['type'] == 'login':
+            self.handle_login_command(message)
+        elif message['type'] == 'put':
+            self.handle_put_command(message)
+        elif message['type'] == 'read':
+            self.handle_read_command(message)
+        elif message['type'] == 'write':
+            self.handle_write_command(message)
+        elif message['type'] == 'get':
+            self.handle_get_command(message)
+        else:
+            print('not vaild')
+
+    def handle_register_command(self, message):
+        print('in register')
+        uname = message['uname']
+        salt = self.base64_encode(os.urandom(12))
+        password = message['password'] + salt # returns a string of password + salt
+        conf_label = int(message['conf_label'])
+        integrity_label = int(message['integrity_label'])
+        if self.check_uname(uname) and self.check_pass(password):
+            self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, last_attempt)
+                                            VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,NULL ,NULL)""",
+                                            {'uname' : uname, 'password' : password , 'salt' : salt, 'conf_label' : conf_label , 'integ_label' : integrity_label})
+            self.mydb.commit()
+        else:
+            print('fail')
+
+    def handle_login_command(self, message):
+        print('in login')
+
+    def handle_put_command(self, message):
+        print('in put')
+
+    def handle_read_command(self, message):
+        print('in read')
+
+    def handle_write_command(self, message):
+        print('in write')
+
+    def handle_get_command(self, message):
+        print('in get')
+
+    def check_uname(self, uname):
+        self.cursor.execute("SELECT ID FROM users WHERE uname = %(uname)s" , {'uname' : uname})
+        user_table = self.cursor.fetchall()
+        if not len(user_table):
+            return True
+        else:
+            return False
+
+    def check_pass(self, password):
+        if len(password) < 8:
+            return False
+        else:
+            return True
+
 
 
 class clients():
@@ -254,15 +303,14 @@ class files():
 # TODO: recieve message CHECK
 # TODO: base64 encode CHECk
 # TODO: base64 decode CHECK
-# TODO: encryption file
-# TODO: decryption file
-# TODO: send file
-# TODO: recieve file
-# TODO: create database
-# TODO: calculate hash
-# TODO: check hash
-# TODO: weak password
-# TODO: hash passwords
+# TODO: encryption file CHECK
+# TODO: decryption file CHECK
+# TODO: send file CHECK
+# TODO: recieve file CHECL
+# TODO: create database CHECK
+# TODO: calculate hash CHECK
+# TODO: check hash CHECK
+# TODO: hash passwords CHECK
 # TODO: register
 # TODO: login
 # TODO: put
@@ -271,6 +319,7 @@ class files():
 # TODO: get
 # TODO: BLP
 # TODO: Biba
+# TODO: weak password
 # TODO: backoff
 # TODO: logging
 # TODO: analyse logs
