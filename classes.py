@@ -142,6 +142,8 @@ class socket_conn(cryptography):
             self.handle_write_answer_command(message)
         elif message['type'] == 'get':
             self.handle_get_command(message)
+        elif message['type'] == 'get_answer':
+            self.handle_get_answer_command(message)
         elif message['type'] == 'ls':
             self.handle_ls_command()
         elif message['type'] == 'ls_answer':
@@ -327,6 +329,7 @@ class server(socket_conn):
             content = file.read()
             content_base64 = self.base64_encode(content)
             content_dic = {'type': 'read_answer' , 'content' : content_base64}
+            print('read successfully, sending data to client')
         else:
             print('no such file')
             content_dic = {'type': 'read_answer' , 'content' : 'ERROR : no such file'}
@@ -351,6 +354,18 @@ class server(socket_conn):
 
     def handle_get_command(self, message):
         print('in get')
+        if not self.check_file_name(message['filename']):
+            file = open(message['filename'], 'rb')
+            content = file.read()
+            content_base64 = self.base64_encode(content)
+            content_dic = {'type': 'get_answer' , 'content' : content_base64 , 'filename' : message['filename']}
+            print('read successfully, sending data to client')
+        else:
+            print('no such file')
+            content_dic = {'type': 'get_answer' , 'content' : 'ERROR : no such file'}
+
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
 
     def handle_ls_command(self):
         print('in ls...')
@@ -417,7 +432,7 @@ class clients(socket_conn):
 
     def handle_read_answer_command(self,message):
         print('in read answer...')
-        if not message['content'] == 'no such file':
+        if not message['content'] == 'ERROR : no such file':
             print(self.base64_decode(message['content']).decode())
         else:
             print(message['content'])
@@ -440,6 +455,14 @@ class clients(socket_conn):
     def handle_write_answer_command(self, message):
         print(message['content'])
 
+    def handle_get_answer_command(self, message):
+        # file.write(self.base64_decode(message['content']))
+        # self.add_file_to_database(message)
+        if not message['content'] == 'ERROR : no such file':
+            file = open('1' + message['filename'], 'wb')
+            file.write(self.base64_decode(message['content']))
+        else:
+            print(message['content'])
 
 
 
@@ -471,7 +494,7 @@ class files():
 # TODO: put                     CHECK
 # TODO: read                    CHECK
 # TODO: ls                      CHECK
-# TODO: write
+# TODO: write                   CHECK
 # TODO: get
 # TODO: BLP
 # TODO: Biba
