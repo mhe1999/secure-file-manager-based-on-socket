@@ -138,6 +138,8 @@ class socket_conn(cryptography):
             self.handle_read_answer_command(message)
         elif message['type'] == 'write':
             self.handle_write_command(message)
+        elif message['type'] == 'write_answer':
+            self.handle_write_answer_command(message)
         elif message['type'] == 'get':
             self.handle_get_command(message)
         elif message['type'] == 'ls':
@@ -325,16 +327,27 @@ class server(socket_conn):
             content = file.read()
             content_base64 = self.base64_encode(content)
             content_dic = {'type': 'read_answer' , 'content' : content_base64}
-            content_json = json.dumps(content_dic)
-            self.send_message(content_json)
+        else:
+            print('no such file')
+            content_dic = {'type': 'read_answer' , 'content' : 'ERROR : no such file'}
+
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
+
+    def handle_write_command(self, message):
+        print('in write')
+        if not self.check_file_name(message['filename']):
+            file = open(message['filename'], 'wt')
+            file.write(message['content'])
+            print('write successfully')
+            content_dic = {'type': 'write_answer' , 'content' : 'writing in file done successfully'}
 
         else:
             print('no such file')
-            content_dic = {'type': 'read_answer' , 'content' : 'no such file'}
-            content_json = json.dumps(content_dic)
-            self.send_message(content_json)
-    def handle_write_command(self, message):
-        print('in write')
+            content_dic = {'type': 'write_answer' , 'content' : 'ERROR : no such file'}
+
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
 
     def handle_get_command(self, message):
         print('in get')
@@ -423,6 +436,10 @@ class clients(socket_conn):
 
     def handle_put_answer_command(self, message):
         print(message['content'])
+
+    def handle_write_answer_command(self, message):
+        print(message['content'])
+
 
 
 
