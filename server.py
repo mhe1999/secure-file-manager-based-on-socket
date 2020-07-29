@@ -49,25 +49,32 @@ def on_new_client(clientsocket):
     # print(enc)
     # dec = rsa.decrypt(enc, server_privkey).decode()
     # print(dec)
-    while True:
-        msg = clientsocket.recv(4096)
-        # msg = 'hello world'.encode()
-        print(server_socket.base64_encode(msg))
+    msg = clientsocket.recv(4096)
+    # msg = 'hello world'.encode()
+    print(server_socket.base64_encode(msg))
 
-        server_socket.recieve_session_key(msg)
-        print(server_socket.base64_encode(server_socket.session_key))
+    server_socket.recieve_session_key(msg)
+    print(server_socket.base64_encode(server_socket.session_key))
+
+    while True:
         msg = bytes()
+        clientsocket.setblocking(1)
+        data = clientsocket.recv(4096)
+        msg += data
+        clientsocket.setblocking(0)
         while True:
-            data = clientsocket.recv(4096)
-            if not data:
+            try:
+                data = clientsocket.recv(4096)
+                # print(msg)
+            except :
                 break
             msg += data
-
+        # print(msg)
         server_socket.recieve_message(msg)
         # server_socket.recieve_file('text1.txt')
         # server_socket.database_connection()
         # server_socket.check_uname('abc')
-        break
+
     clientsocket.close()
 
 s = socket.socket()

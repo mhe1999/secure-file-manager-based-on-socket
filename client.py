@@ -1,6 +1,6 @@
 import socket
 import rsa
-from classes import socket_conn
+from classes import clients
 
 
 server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
@@ -22,9 +22,60 @@ PORT = 65432        # The port used by the server
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     print('hello')
-    client_socket = socket_conn(conn = s , server_pubkey = server_pubkey)
+    client_socket = clients(conn = s , server_pubkey = server_pubkey)
     client_socket.send_session_key()
     # print(client_socket.base64_encode(client_socket.session_key), '\n\n')
-    msg = input('enter \n')
-    client_socket.send_message_handler(msg)
-    # client_socket.send_file('test.txt')
+    # msg = input('enter \n')
+    # print('before from loop')
+    #
+    # # client_socket.send_file('test.txt')
+    # msg = bytes()
+    # while True:
+    #     print('hey')
+    #     data = s.recv(4096)
+    #     print(data)
+    #     if not data:
+    #         break
+    #     msg += data
+    # print('pass from loop')
+    # server_socket.recieve_message(msg)
+    # msg = bytes()
+    # s.setblocking(1)
+    # print('1')
+    # data = s.recv(4096)
+    # print('2')
+    # msg += data
+    while True:
+        type = input('-----------\n')
+        client_socket.send_message_handler(type)
+        msg = bytes()
+        s.setblocking(1)
+        data = s.recv(4096)
+        # print(data)
+        msg += data
+        s.setblocking(0)
+        while True:
+            try:
+                data = s.recv(4096)
+                if not data:
+                    break
+                msg += data
+            except:
+                break
+        client_socket.recieve_message(msg)
+
+
+        # client_socket.recieve_message(data)
+
+    # s.setblocking(0)
+    # print('3')
+    # while True:
+    #     try:
+    #         data = s.recv(4096)
+    #         msg += data
+    #         print('4')
+    #     except :
+    #         print('5')
+    #         break
+    # # print(msg)
+    # print('6')
