@@ -2,6 +2,7 @@ import os
 import rsa
 import json
 import base64
+import re
 from Crypto.Cipher import AES
 import mysql.connector
 from mysql.connector import errorcode
@@ -274,7 +275,7 @@ class server(socket_conn):
         password = message['password'] + salt # returns a string of password + salt
         conf_label = int(message['conf_label'])
         integrity_label = int(message['integrity_label'])
-        if self.check_uname(uname) and self.check_pass_register(password):
+        if self.check_uname(uname) and self.check_pass_register(uname, password):
             self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, last_attempt)
                                             VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,NULL ,NULL)""",
                                             {'uname' : uname, 'password' : password , 'salt' : salt, 'conf_label' : conf_label , 'integ_label' : integrity_label})
@@ -286,7 +287,7 @@ class server(socket_conn):
             answer_dic = {'type' : 'register_answer' , 'content' : 'ERROR : duplicate user name'}
 
         else:
-            print('duplicate user name')
+            print('weak password')
             answer_dic = {'type' : 'register_answer' , 'content' : 'ERROR : weak password'}
 
         answer_json = json.dumps(answer_dic)
@@ -400,8 +401,16 @@ class server(socket_conn):
         else:
             return False
 
-    def check_pass_register(self, password):
+    def check_pass_register(self, uname, password):
         if len(password) < 8:
+            return False
+        elif not re.search('[a-z]' , password):
+            return False
+        elif not re.search('[A-Z]' , password):
+            return False
+        elif not re.search('[a-z]' , password):
+            return False
+        elif password.find(uname) == -1:
             return False
         else:
             return True
@@ -559,7 +568,7 @@ class files():
 # TODO: get                     CHECK
 # TODO: BLP                     CHECK
 # TODO: Biba                    CHECK
-# TODO: weak password
+# TODO: weak password           CHECK
 # TODO: backoff
 # TODO: logging
 # TODO: analyse logs
