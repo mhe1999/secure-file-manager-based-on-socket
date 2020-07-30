@@ -276,8 +276,8 @@ class server(socket_conn):
         conf_label = int(message['conf_label'])
         integrity_label = int(message['integrity_label'])
         if self.check_uname(uname) and self.check_pass_register(uname, password):
-            self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, last_attempt)
-                                            VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,NULL ,NULL)""",
+            self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
+                                            VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
                                             {'uname' : uname, 'password' : password , 'salt' : salt, 'conf_label' : conf_label , 'integ_label' : integrity_label})
             self.mydb.commit()
             answer_dic = {'type' : 'register_answer' , 'content' : 'register successfully'}
@@ -297,7 +297,8 @@ class server(socket_conn):
         print('in login')
         uname = message['uname']
         password = message['password']
-        if self.check_pass_login(uname, password):
+        temp =  self.check_possible_backoff(uname)
+        if not self.check_uname(uname) and self.check_pass_login(uname, password) and temp == 'True':
             print('login successfully')
             print(self.user_id)
             print(self.user_conf)
@@ -305,9 +306,18 @@ class server(socket_conn):
 
             answer_dic = {'type' : 'login_answer' , 'content' : 'Login successfully'}
 
-        else:
-            answer_dic = {'type' : 'login_answer' , 'content' : 'ERROR : invalid username or password'}
-            print('unsuccess')
+        elif self.check_uname(uname):
+            answer_dic = {'type' : 'login_answer' , 'content' : 'ERROR : invalid username'}
+            print('invalid username')
+        elif not temp == 'True':
+            answer_dic = {'type' : 'login_answer' , 'content' : temp}
+            print('wait',temp, 'to try again')
+
+        elif not self.check_pass_login(uname, password):
+            answer_dic = {'type' : 'login_answer' , 'content' : 'ERROR : invalid password'}
+            print('invalid password')
+            self.update_login_backoff(uname)
+
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
@@ -403,14 +413,19 @@ class server(socket_conn):
 
     def check_pass_register(self, uname, password):
         if len(password) < 8:
+            print('len')
             return False
         elif not re.search('[a-z]' , password):
+            print('a-z')
             return False
         elif not re.search('[A-Z]' , password):
+            print('A-Z')
             return False
-        elif not re.search('[a-z]' , password):
+        elif not re.search('[1-9]' , password):
+            print('1-9')
             return False
-        elif password.find(uname) == -1:
+        elif not password.find(uname) == -1:
+            print('shet')
             return False
         else:
             return True
@@ -496,6 +511,49 @@ class server(socket_conn):
         else:
             return False
 
+    def update_login_backoff(self, uname):
+        self.cursor.execute("""UPDATE users
+                               SET users.number_of_attempts = users.number_of_attempts + 1
+                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+        self.mydb.commit()
+
+        self.cursor.execute("""SELECT users.number_of_attempts
+                               FROM users
+                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+
+        content = self.cursor.fetchall()
+        if content[0][0] >=5:
+            self.block_user(uname)
+
+    def block_user(self, uname):
+        self.cursor.execute("""UPDATE users
+                               SET users.is_block = 1 , users.block_time = NOW()
+                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+        self.mydb.commit()
+
+    def unblock_user(self, uname):
+        self.cursor.execute("""UPDATE users
+                               SET users.is_block = 0 , users.block_time = NULL , users.number_of_attempts = 0
+                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+        self.mydb.commit()
+
+    def check_possible_backoff(self, uname):
+        self.cursor.execute("""SELECT CASE
+		                          WHEN h.is_block = 1 AND TIMEDIFF(NOW(), h.block_time) < cast('00:05:00' as time) THEN TIMEDIFF('00:05:00', TIMEDIFF(NOW(), h.block_time))
+                                  WHEN h.is_block = 1 AND TIMEDIFF(NOW(), h.block_time) >= cast('00:05:00' as time) THEN 'unblock'
+                                  when h.is_block = 0 THEN 'not block'
+                                  END
+                                FROM users as h
+                                WHERE uname = %(uname)s""" , {'uname' : uname})
+        resault = self.cursor.fetchall()
+        print(resault[0][0])
+        if resault[0][0] == 'unblock':
+            self.unblock_user(uname)
+            return 'True'
+        elif resault[0][0] == 'not block':
+            return 'True'
+        else:
+            return resault[0][0]
 class clients(socket_conn):
     def __init__(self,conn, server_pubkey):
         super().__init__(conn, server_pubkey)

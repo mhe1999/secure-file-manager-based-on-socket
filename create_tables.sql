@@ -15,7 +15,8 @@ CREATE TABLE users(
     conf_label int,
     integ_label int,
     number_of_attempts int,
-    last_attempt DATETIME,
+    block_time DATETIME,
+    is_block int default 0,
     foreign key (conf_label) references conf(ID),
 	foreign key (integ_label) references integrity(ID)
 );
@@ -64,10 +65,9 @@ INSERT INTO access_type(ID, type_name) values
                 (2 , 'write'),
                 (3 , 'get');
                 
--- DROP TABLE DAC;
--- DROP TABLE files;
--- DROP TABLE users;
--- select * from users
+                
+
+
 
 
 
