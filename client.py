@@ -14,7 +14,7 @@ server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 9096433733507311626064586608627154087661325313'''.replace('\n', '')), 65537)
 
 HOST = '127.0.0.1'  # The server's hostname or IP address
-PORT = 65432        # The port used by the server
+PORT = 65436        # The port used by the server
 
 # client_crypto = cryptography(server_pubkey = server_pubkey)
 # client_socket = socket()
@@ -22,7 +22,7 @@ PORT = 65432        # The port used by the server
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     print('hello')
-    client_socket = clients(conn = s , server_pubkey = server_pubkey)
+    client_socket = clients(conn=s, server_pubkey=server_pubkey)
     client_socket.send_session_key()
     # print(client_socket.base64_encode(client_socket.session_key), '\n\n')
     # msg = input('enter \n')
@@ -63,7 +63,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             except:
                 break
         client_socket.recieve_message(msg)
-
 
         # client_socket.recieve_message(data)
 

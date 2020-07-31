@@ -3,36 +3,43 @@ import rsa
 import json
 import base64
 import re
-from Crypto.Cipher import AES
+from Cryptodome.Cipher import AES
 import mysql.connector
 from mysql.connector import errorcode
-
+import passwordmeter
 
 
 class cryptography():
     def __init__(self, server_pubkey):
         self.server_pubkey = server_pubkey
 
-    def encrypt_RSA(self, message, key):             # message : string, key : rsa.PublicKey default = server_pubkey
-        return rsa.encrypt(message.encode(), self.server_pubkey)    # returns a 'byte' type of encrypted message
+    # message : string, key : rsa.PublicKey default = server_pubkey
+    def encrypt_RSA(self, message, key):
+        # returns a 'byte' type of encrypted message
+        return rsa.encrypt(message.encode(), self.server_pubkey)
 
-    def decrypt_RSA(self, encrypted_message, key): # encrypted_message : 'byte' type, key : rsa.PrivateKey
-        return rsa.decrypt(encrypted_message, key).decode()        # returns a string of decrypted message
+    # encrypted_message : 'byte' type, key : rsa.PrivateKey
+    def decrypt_RSA(self, encrypted_message, key):
+        # returns a string of decrypted message
+        return rsa.decrypt(encrypted_message, key).decode()
 
     def create_session_key(self):
         self.session_key = os.urandom(32)
         return self.session_key   # returns a 256 bit 'byte' type
 
     def encrypt_AES(self, plaintext):
-        cipher = AES.new(self.session_key,AES.MODE_EAX) # FIXME: EAD mode
+        cipher = AES.new(self.session_key, AES.MODE_EAX)  # FIXME: EAD mode
         nonce = cipher.nonce
-        ciphertext, tag = cipher.encrypt_and_digest(plaintext.encode()) # encryte data
+        ciphertext, tag = cipher.encrypt_and_digest(
+            plaintext.encode())  # encryte data
         return ciphertext, nonce
 
     def decrypt_AES(self, message_bytes, nonce):
         print('decrypting data...')
-        cipher = AES.new(self.session_key, AES.MODE_EAX, nonce=nonce) # FIXME: EAD mode
-        plaintext = cipher.decrypt(message_bytes)               # decrype message with session key and nonce
+        cipher = AES.new(self.session_key, AES.MODE_EAX,
+                         nonce=nonce)  # FIXME: EAD mode
+        # decrype message with session key and nonce
+        plaintext = cipher.decrypt(message_bytes)
         plaintext = plaintext.decode()
         return plaintext
 
@@ -60,18 +67,22 @@ class cryptography():
         return message_bytes
 
 #####################################################################################################################################################################
+
+
 class socket_conn(cryptography):
     def __init__(self, conn, server_pubkey):
-        super().__init__(server_pubkey = server_pubkey)
+        super().__init__(server_pubkey=server_pubkey)
         self.conn = conn
 
     def send_session_key(self):
         self.create_session_key()
-        session_key_dic = {'type' : 'session_key', 'value' : self.base64_encode(self.session_key)}
+        session_key_dic = {'type': 'session_key',
+                           'value': self.base64_encode(self.session_key)}
         session_key_json = json.dumps(session_key_dic)
-        session_key_json_encrytped_RSA = self.encrypt_RSA(session_key_json, key=self.server_pubkey)
+        session_key_json_encrytped_RSA = self.encrypt_RSA(
+            session_key_json, key=self.server_pubkey)
         # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
-        print(self.base64_encode(session_key_json_encrytped_RSA),'\n\n')
+        print(self.base64_encode(session_key_json_encrytped_RSA), '\n\n')
         self.conn.sendall(session_key_json_encrytped_RSA)
 
     # def send_file(self, file_name):
@@ -105,24 +116,30 @@ class socket_conn(cryptography):
         encrypted_message, nonce = self.encrypt_AES(message)
         encrypted_message_base64 = self.base64_encode(encrypted_message)
         nonce_base64 = self.base64_encode(nonce)
-        encrypted_message_dic = {'encrypted_message' : encrypted_message_base64 ,
-                                  'nonce' : nonce_base64}
+        encrypted_message_dic = {'encrypted_message': encrypted_message_base64,
+                                 'nonce': nonce_base64}
         encrypted_message_json = json.dumps(encrypted_message_dic)
         self.conn.sendall(encrypted_message_json.encode())
 
     def recieve_message(self, encrypted_message_json):
-        message_json = json.loads(encrypted_message_json.decode())    # message_json = {'encrypted_message' : aksdlbfvmnsznasfdfb,
-        encrypted_message_base64 = message_json['encrypted_message']  #                 'nonce' : mnfmq}
+        # message_json = {'encrypted_message' : aksdlbfvmnsznasfdfb,
+        message_json = json.loads(encrypted_message_json.decode())
+        # 'nonce' : mnfmq}
+        encrypted_message_base64 = message_json['encrypted_message']
         nonce_base64 = message_json['nonce']
         encrypted_message = self.base64_decode(encrypted_message_base64)
         nonce = self.base64_decode(nonce_base64)
-        message = self.decrypt_AES(encrypted_message, nonce) # message = {'type' : login, ...} --- json
+        # message = {'type' : login, ...} --- json
+        message = self.decrypt_AES(encrypted_message, nonce)
         self.recieve_message_handler(message)
 
-    def recieve_message_handler(self, message_json): # message_json = {'type' : login, ...} ---> json
-        message = json.loads(message_json)           # message = {'type' : login, ...} ---> dict
+    # message_json = {'type' : login, ...} ---> json
+    def recieve_message_handler(self, message_json):
+        # message = {'type' : login, ...} ---> dict
+        message = json.loads(message_json)
         if message['type'] == 'register':
-            self.handle_register_command(message) # FIXME: user input is name of BLP and BIBA levels, not number
+            # FIXME: user input is name of BLP and BIBA levels, not number
+            self.handle_register_command(message)
         elif message['type'] == 'register_answer':
             self.handle_register_answer_command(message)
         elif message['type'] == 'login':
@@ -130,7 +147,8 @@ class socket_conn(cryptography):
         elif message['type'] == 'login_answer':
             self.handle_login_answer_command(message)
         elif message['type'] == 'put':
-            self.handle_put_command(message) # FIXME: user input is name of BLP and BIBA levels, not number
+            # FIXME: user input is name of BLP and BIBA levels, not number
+            self.handle_put_command(message)
         elif message['type'] == 'put_answer':
             self.handle_put_answer_command(message)
         elif message['type'] == 'read':
@@ -153,32 +171,32 @@ class socket_conn(cryptography):
             print('not vaild')
 
     def send_message_handler(self, message):
-        message_array = message.split() # FIXME: file names with space
+        message_array = message.split()  # FIXME: file names with space
         type = message_array[0]
         if type == 'register':
-            self.send_register_command(uname = message_array[1],
-                                       password = message_array[2],
-                                       conf_label = message_array[3],
-                                       integrity_label = message_array[4])
+            self.send_register_command(uname=message_array[1],
+                                       password=message_array[2],
+                                       conf_label=message_array[3],
+                                       integrity_label=message_array[4])
 
         elif type == 'login':
-            self.send_login_command(   uname = message_array[1],
-                                       password = message_array[2])
+            self.send_login_command(uname=message_array[1],
+                                    password=message_array[2])
 
         elif type == 'put':
-            self.send_put_command(     filename = message_array[1],
-                                       conf_label = message_array[2],
-                                       integrity_label = message_array[3])
+            self.send_put_command(filename=message_array[1],
+                                  conf_label=message_array[2],
+                                  integrity_label=message_array[3])
 
         elif type == 'read':
-            self.send_read_command(    filename = message_array[1])
+            self.send_read_command(filename=message_array[1])
 
         elif type == 'write':
-            self.send_write_command(   filename = message_array[1],
-                                       content = message_array[2])
+            self.send_write_command(filename=message_array[1],
+                                    content=message_array[2])
 
         elif type == 'get':
-            self.send_get_command(    filename = message_array[1])
+            self.send_get_command(filename=message_array[1])
 
         elif type == 'ls':
             self.send_ls_command()
@@ -187,57 +205,59 @@ class socket_conn(cryptography):
             print('not valid input')
 
     def send_register_command(self, uname, password, conf_label, integrity_label):
-        dic_message = {'type' : 'register',
-                       'uname' : uname,
-                       'password' : password,
-                       'conf_label' : conf_label,
-                       'integrity_label' : integrity_label}
+        dic_message = {'type': 'register',
+                       'uname': uname,
+                       'password': password,
+                       'conf_label': conf_label,
+                       'integrity_label': integrity_label}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_login_command(self, uname, password):
-        dic_message = {'type' : 'login',
-                       'uname' : uname,
-                       'password' : password}
+        dic_message = {'type': 'login',
+                       'uname': uname,
+                       'password': password}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_put_command(self, filename, conf_label, integrity_label):
         file = open(filename, 'rb')
         content = self.base64_encode(file.read())
-        dic_message = {'type' : 'put',
-                       'filename' : filename,
-                       'conf_label' : conf_label,
-                       'integrity_label' : integrity_label,
-                       'file' : content}
+        dic_message = {'type': 'put',
+                       'filename': filename,
+                       'conf_label': conf_label,
+                       'integrity_label': integrity_label,
+                       'file': content}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_read_command(self, filename):
-        dic_message = {'type' : 'read',
-                       'filename' : filename}
+        dic_message = {'type': 'read',
+                       'filename': filename}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_write_command(self, filename, content):
-        dic_message = {'type' : 'write',
-                       'filename' : filename,
-                       'content' : content}
+        dic_message = {'type': 'write',
+                       'filename': filename,
+                       'content': content}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_get_command(self, filename):
-        dic_message = {'type' : 'get',
-                       'filename' : filename}
+        dic_message = {'type': 'get',
+                       'filename': filename}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
     def send_ls_command(self):
-        dic_message = {'type' : 'ls'}
+        dic_message = {'type': 'ls'}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
 ##################################################################################################################################################################
+
+
 class server(socket_conn):
     def __init__(self, conn, server_pubkey, server_privkey):
         super().__init__(conn, server_pubkey)
@@ -247,10 +267,10 @@ class server(socket_conn):
     def database_connection(self):
         try:
             self.mydb = mysql.connector.connect(
-            host="localhost",
-            user="Mohammad",
-            password="1234",
-            database='file_manager'
+                host="localhost",
+                user="root",
+                password="1234",
+                database='file_manager'
             )
             self.cursor = self.mydb.cursor()
         except mysql.connector.Error as err:
@@ -264,7 +284,8 @@ class server(socket_conn):
 
     def recieve_session_key(self, session_key_json_encrytped_RSA):
         # print('XXXX    ',session_key_json_encrytped_RSA, '\n')
-        session_key_json = self.decrypt_RSA(session_key_json_encrytped_RSA, key = self.server_privkey)
+        session_key_json = self.decrypt_RSA(
+            session_key_json_encrytped_RSA, key=self.server_privkey)
         session_key_dic = json.loads(session_key_json)
         self.session_key = self.base64_decode(session_key_dic['value'])
 
@@ -272,23 +293,27 @@ class server(socket_conn):
         print('in register')
         uname = message['uname']
         salt = self.base64_encode(os.urandom(12))
-        password = message['password'] + salt # returns a string of password + salt
+        # returns a string of password + salt
+        password = message['password'] + salt
         conf_label = int(message['conf_label'])
         integrity_label = int(message['integrity_label'])
-        if self.check_uname(uname) and self.check_pass_register(uname, password):
+        if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
             self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
                                             VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
-                                            {'uname' : uname, 'password' : password , 'salt' : salt, 'conf_label' : conf_label , 'integ_label' : integrity_label})
+                                {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
             self.mydb.commit()
-            answer_dic = {'type' : 'register_answer' , 'content' : 'register successfully'}
+            answer_dic = {'type': 'register_answer',
+                          'content': 'register successfully'}
 
         elif not self.check_uname(uname):
             print('duplicate user name')
-            answer_dic = {'type' : 'register_answer' , 'content' : 'ERROR : duplicate user name'}
+            answer_dic = {'type': 'register_answer',
+                          'content': 'ERROR : duplicate user name'}
 
         else:
             print('weak password')
-            answer_dic = {'type' : 'register_answer' , 'content' : 'ERROR : weak password'}
+            answer_dic = {'type': 'register_answer',
+                          'content': 'ERROR : weak password'}
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
@@ -297,41 +322,47 @@ class server(socket_conn):
         print('in login')
         uname = message['uname']
         password = message['password']
-        temp =  self.check_possible_backoff(uname)
-        if not self.check_uname(uname) and self.check_pass_login(uname, password) and temp == 'True':
+#           temp =  self.check_possible_backoff(uname)
+        if not self.check_uname(uname) and self.check_pass_login(uname, password):
             print('login successfully')
             print(self.user_id)
             print(self.user_conf)
             print(self.user_integ)
 
-            answer_dic = {'type' : 'login_answer' , 'content' : 'Login successfully'}
+            answer_dic = {'type': 'login_answer',
+                          'content': 'Login successfully'}
 
         elif self.check_uname(uname):
-            answer_dic = {'type' : 'login_answer' , 'content' : 'ERROR : invalid username'}
+            answer_dic = {'type': 'login_answer',
+                          'content': 'ERROR : invalid username'}
             print('invalid username')
         elif not temp == 'True':
-            answer_dic = {'type' : 'login_answer' , 'content' : temp}
-            print('wait',temp, 'to try again')
+            answer_dic = {'type': 'login_answer', 'content': temp}
+            print('wait', temp, 'to try again')
 
         elif not self.check_pass_login(uname, password):
-            answer_dic = {'type' : 'login_answer' , 'content' : 'ERROR : invalid password'}
+            answer_dic = {'type': 'login_answer',
+                          'content': 'ERROR : invalid password'}
             print('invalid password')
             self.update_login_backoff(uname)
-
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
 
     def handle_put_command(self, message):
         print('in put')
-        if self.check_file_name(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1]): # FIXME: file name without .txt
-            file = open(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1], 'wb') # FIXME: file name without .txt
+        # FIXME: file name without .txt
+        if self.check_file_name(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1]):
+            file = open(message['filename'].split('.')[
+                        0] + '_server.' + message['filename'].split('.')[1], 'wb')  # FIXME: file name without .txt
             file.write(self.base64_decode(message['file']))
             self.add_file_to_database(message)
-            answer_dic = {'type' : 'put_answer' , 'content' : 'File put in server successfully'}
+            answer_dic = {'type': 'put_answer',
+                          'content': 'File put in server successfully'}
         else:
             print('duplicate name of file')
-            answer_dic = {'type' : 'put_answer' , 'content' : 'ERROR : Duplicate name'}
+            answer_dic = {'type': 'put_answer',
+                          'content': 'ERROR : Duplicate name'}
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
@@ -342,37 +373,44 @@ class server(socket_conn):
             file = open(message['filename'], 'rb')
             content = file.read()
             content_base64 = self.base64_encode(content)
-            content_dic = {'type': 'read_answer' , 'content' : content_base64}
+            content_dic = {'type': 'read_answer', 'content': content_base64}
             print('read successfully, sending data to client')
         elif self.check_file_name(message['filename']):
             print('no such file')
-            content_dic = {'type': 'read_answer' , 'content' : 'ERROR : no such file'}
+            content_dic = {'type': 'read_answer',
+                           'content': 'ERROR : no such file'}
         elif not self.check_BLP_read(message['filename']):
             print('not BLP authorize')
-            content_dic = {'type': 'read_answer' , 'content' : 'ERROR : not BLP authorize'}
+            content_dic = {'type': 'read_answer',
+                           'content': 'ERROR : not BLP authorize'}
         elif not self.check_BIBA_read(message['filename']):
             print('not BIBA authorize')
-            content_dic = {'type': 'read_answer' , 'content' : 'ERROR : not BIBA authorize'}
+            content_dic = {'type': 'read_answer',
+                           'content': 'ERROR : not BIBA authorize'}
 
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
 
-    def handle_write_command(self, message): # FIXME: messages with spaces
+    def handle_write_command(self, message):  # FIXME: messages with spaces
         print('in write')
         if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
             file = open(message['filename'], 'wt')
             file.write(message['content'])
             print('write successfully')
-            content_dic = {'type': 'write_answer' , 'content' : 'writing in file done successfully'}
+            content_dic = {'type': 'write_answer',
+                           'content': 'writing in file done successfully'}
         elif self.check_file_name(message['filename']):
             print('no such file')
-            content_dic = {'type': 'write_answer' , 'content' : 'ERROR : no such file'}
+            content_dic = {'type': 'write_answer',
+                           'content': 'ERROR : no such file'}
         elif not self.check_BIBA_write(message['filename']):
             print('no such file')
-            content_dic = {'type': 'write_answer' , 'content' : 'ERROR : not BIBA authorize'}
+            content_dic = {'type': 'write_answer',
+                           'content': 'ERROR : not BIBA authorize'}
         elif self.check_BLP_write(message['filename']):
             print('no such file')
-            content_dic = {'type': 'write_answer' , 'content' : 'ERROR : not BLP authorize'}
+            content_dic = {'type': 'write_answer',
+                           'content': 'ERROR : not BLP authorize'}
 
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
@@ -383,12 +421,14 @@ class server(socket_conn):
             file = open(message['filename'], 'rb')
             content = file.read()
             content_base64 = self.base64_encode(content)
-            content_dic = {'type': 'get_answer' , 'content' : content_base64 , 'filename' : message['filename']}
+            content_dic = {'type': 'get_answer',
+                           'content': content_base64, 'filename': message['filename']}
             print('read successfully, sending data to client')
             # FIXME: delete file
         else:
             print('no such file')
-            content_dic = {'type': 'get_answer' , 'content' : 'ERROR : no such file'}
+            content_dic = {'type': 'get_answer',
+                           'content': 'ERROR : no such file'}
 
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
@@ -399,12 +439,13 @@ class server(socket_conn):
                                FROM users as u inner join files as f on(u.ID = f.ownerID)
 				               inner join conf on(f.conf_label = conf.ID)
                                inner join integrity on (f.integ_label = integrity.ID)""")
-        content_dic = {'type': 'ls_answer' , 'content' : self.cursor.fetchall()}
+        content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
 
     def check_uname(self, uname):
-        self.cursor.execute("SELECT ID FROM users WHERE uname = %(uname)s" , {'uname' : uname})
+        self.cursor.execute(
+            "SELECT ID FROM users WHERE uname = %(uname)s", {'uname': uname})
         user_table = self.cursor.fetchall()
         if not len(user_table):
             return True
@@ -412,20 +453,8 @@ class server(socket_conn):
             return False
 
     def check_pass_register(self, uname, password):
-        if len(password) < 8:
-            print('len')
-            return False
-        elif not re.search('[a-z]' , password):
-            print('a-z')
-            return False
-        elif not re.search('[A-Z]' , password):
-            print('A-Z')
-            return False
-        elif not re.search('[1-9]' , password):
-            print('1-9')
-            return False
-        elif not password.find(uname) == -1:
-            print('shet')
+        strength, improvements = passwordmeter.test(password)
+        if (strength < 0.85) or ('length' in improvements) or ('charmix' in improvements) or ('casemix' in improvements) or ('notword' in improvements) or ('variety' in improvements) or (uname in password):
             return False
         else:
             return True
@@ -434,7 +463,7 @@ class server(socket_conn):
         # self.cursor.execute("SELECT salt FROM users WHERE uname = %(uname)s" , {'uname' : uname})
         self.cursor.execute(""" SELECT ID, conf_label, integ_label
                                 FROM users
-                                WHERE uname = %(uname)s AND sha2(CONCAT(%(password)s, salt), 256) = pass_hash""" , {'uname' : uname, 'password' : password})
+                                WHERE uname = %(uname)s AND sha2(CONCAT(%(password)s, salt), 256) = pass_hash""", {'uname': uname, 'password': password})
 
         user_table = self.cursor.fetchall()
         if len(user_table):
@@ -448,8 +477,7 @@ class server(socket_conn):
     def check_file_name(self, fname):
         self.cursor.execute(""" SELECT ID
                                 FROM files
-                                WHERE fname = %(fname)s""" , {'fname' : fname})
-
+                                WHERE fname = %(fname)s""", {'fname': fname})
 
         file_table = self.cursor.fetchall()
         if len(file_table):
@@ -458,19 +486,20 @@ class server(socket_conn):
             return True
 
     def add_file_to_database(self, message):
-        fname = message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1] # FIXME: file name without .txt
+        fname = message['filename'].split(
+            '.')[0] + '_server.' + message['filename'].split('.')[1]  # FIXME: file name without .txt
         conf_label = int(message['conf_label'])
         integ_label = int(message['integrity_label'])
-        owner_id = self.user_id # FIXME: owner_id = self.user_id
+        owner_id = self.user_id  # FIXME: owner_id = self.user_id
         self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID)
                                 VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s)""",
-                                {'fname' : fname, 'conf_label' : conf_label , 'integ_label' : integ_label, 'owner_id' : owner_id})
+                            {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id})
         self.mydb.commit()
 
     def check_BLP_read(self, filename):
         self.cursor.execute(""" SELECT conf_label
                                 FROM files
-                                WHERE fname = %(fname)s""" , {'fname' : filename})
+                                WHERE fname = %(fname)s""", {'fname': filename})
 
         file_table = self.cursor.fetchall()
         if file_table[0][0] <= self.user_conf:
@@ -481,7 +510,7 @@ class server(socket_conn):
     def check_BLP_write(self, filename):
         self.cursor.execute(""" SELECT conf_label
                                 FROM files
-                                WHERE fname = %(fname)s""" , {'fname' : filename})
+                                WHERE fname = %(fname)s""", {'fname': filename})
 
         file_table = self.cursor.fetchall()
         if file_table[0][0] >= self.user_integ:
@@ -492,7 +521,7 @@ class server(socket_conn):
     def check_BIBA_read(self, filename):
         self.cursor.execute(""" SELECT integ_label
                                 FROM files
-                                WHERE fname = %(fname)s""" , {'fname' : filename})
+                                WHERE fname = %(fname)s""", {'fname': filename})
 
         file_table = self.cursor.fetchall()
         if file_table[0][0] >= self.user_integ:
@@ -503,7 +532,7 @@ class server(socket_conn):
     def check_BIBA_write(self, filename):
         self.cursor.execute(""" SELECT integ_label
                                 FROM files
-                                WHERE fname = %(fname)s""" , {'fname' : filename})
+                                WHERE fname = %(fname)s""", {'fname': filename})
 
         file_table = self.cursor.fetchall()
         if file_table[0][0] <= self.user_integ:
@@ -514,27 +543,27 @@ class server(socket_conn):
     def update_login_backoff(self, uname):
         self.cursor.execute("""UPDATE users
                                SET users.number_of_attempts = users.number_of_attempts + 1
-                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+                               WHERE users.uname = %(uname)s""", {'uname': uname})
         self.mydb.commit()
 
         self.cursor.execute("""SELECT users.number_of_attempts
                                FROM users
-                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+                               WHERE users.uname = %(uname)s""", {'uname': uname})
 
         content = self.cursor.fetchall()
-        if content[0][0] >=5:
+        if content[0][0] >= 5:
             self.block_user(uname)
 
     def block_user(self, uname):
         self.cursor.execute("""UPDATE users
                                SET users.is_block = 1 , users.block_time = NOW()
-                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+                               WHERE users.uname = %(uname)s""", {'uname': uname})
         self.mydb.commit()
 
     def unblock_user(self, uname):
         self.cursor.execute("""UPDATE users
                                SET users.is_block = 0 , users.block_time = NULL , users.number_of_attempts = 0
-                               WHERE users.uname = %(uname)s""", {'uname' : uname})
+                               WHERE users.uname = %(uname)s""", {'uname': uname})
         self.mydb.commit()
 
     def check_possible_backoff(self, uname):
@@ -544,7 +573,7 @@ class server(socket_conn):
                                   when h.is_block = 0 THEN 'not block'
                                   END
                                 FROM users as h
-                                WHERE uname = %(uname)s""" , {'uname' : uname})
+                                WHERE uname = %(uname)s""", {'uname': uname})
         resault = self.cursor.fetchall()
         print(resault[0][0])
         if resault[0][0] == 'unblock':
@@ -554,11 +583,13 @@ class server(socket_conn):
             return 'True'
         else:
             return resault[0][0]
+
+
 class clients(socket_conn):
-    def __init__(self,conn, server_pubkey):
+    def __init__(self, conn, server_pubkey):
         super().__init__(conn, server_pubkey)
 
-    def handle_read_answer_command(self,message):
+    def handle_read_answer_command(self, message):
         print('in read answer...')
         if not message['content'] == 'ERROR : no such file' and not message['content'] == 'ERROR : not BLP authorize' and not message['content'] == 'ERROR : not BIBA authorize':
             print(self.base64_decode(message['content']).decode())
@@ -566,10 +597,12 @@ class clients(socket_conn):
             print(message['content'])
 
     def handle_ls_answer_command(self, message):
-        print('file name'.ljust(20) , '|' , 'owner name'.ljust(10) , '|' , 'confidentiality'.ljust(15) , '|' , 'integiry'.ljust(20))
+        print('file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
+              'confidentiality'.ljust(15), '|', 'integiry'.ljust(20))
         print('-'*68)
         for row in message['content']:
-            print(row[0].ljust(20) , '|' , row[1].ljust(10) , '|' , row[2].ljust(15) , '|' , row[3].ljust(20))
+            print(row[0].ljust(20), '|', row[1].ljust(10),
+                  '|', row[2].ljust(15), '|', row[3].ljust(20))
 
     def handle_register_answer_command(self, message):
         print(message['content'])
@@ -593,11 +626,8 @@ class clients(socket_conn):
             print(message['content'])
 
 
-
-
 class files():
     pass
-
 
 
 # TODO: calculate session key   CHECK
