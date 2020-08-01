@@ -7,6 +7,7 @@ from Cryptodome.Cipher import AES
 import mysql.connector
 from mysql.connector import errorcode
 import passwordmeter
+import datetime
 
 
 class cryptography():
@@ -73,7 +74,6 @@ class socket_conn(cryptography):
     def __init__(self, conn, server_pubkey):
         super().__init__(server_pubkey=server_pubkey)
         self.conn = conn
-
     def send_session_key(self):
         self.create_session_key()
         session_key_dic = {'type': 'session_key',
@@ -259,10 +259,32 @@ class socket_conn(cryptography):
 
 
 class server(socket_conn):
-    def __init__(self, conn, server_pubkey, server_privkey):
+    def __init__(self, conn, server_pubkey, server_privkey, ClientAddress):
         super().__init__(conn, server_pubkey)
         self.server_privkey = server_privkey
         self.database_connection()
+        self.ClientAddress = ClientAddress
+        print(self.ClientAddress)
+    
+    def login_log(self,uname,status, addr):
+
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'Login: ' + status + ', username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
+        f.write(msg)
+        f.close()
+
+
+
+    def register_log(self,uname,status,addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'Register: ' + status + ', username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
+        f.write(msg)
+        f.close()
+
+
+
 
     def database_connection(self):
         try:
@@ -304,16 +326,20 @@ class server(socket_conn):
             self.mydb.commit()
             answer_dic = {'type': 'register_answer',
                           'content': 'register successfully'}
+            self.register_log(uname, 'Successful Register', self.ClientAddress)
 
         elif not self.check_uname(uname):
             print('duplicate user name')
             answer_dic = {'type': 'register_answer',
                           'content': 'ERROR : duplicate user name'}
+            self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
 
         else:
             print('weak password')
             answer_dic = {'type': 'register_answer',
                           'content': 'ERROR : weak password'}
+            self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
+
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
@@ -323,7 +349,7 @@ class server(socket_conn):
         uname = message['uname']
         password = message['password']
 #           temp =  self.check_possible_backoff(uname)
-        if not self.check_uname(uname) and self.check_pass_login(uname, password):
+        if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
             print('login successfully')
             print(self.user_id)
             print(self.user_conf)
@@ -331,20 +357,25 @@ class server(socket_conn):
 
             answer_dic = {'type': 'login_answer',
                           'content': 'Login successfully'}
+            self.login_log(uname, 'Login successfully', self.ClientAddress)
 
-        elif self.check_uname(uname):
+        elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
             answer_dic = {'type': 'login_answer',
-                          'content': 'ERROR : invalid username'}
-            print('invalid username')
-        elif not temp == 'True':
-            answer_dic = {'type': 'login_answer', 'content': temp}
-            print('wait', temp, 'to try again')
+                          'content': 'ERROR : invalid username or password'}
+            print('invalid username or password')
+            if (self.check_uname(uname)):
+                self.login_log(uname, 'Invalid username', self.ClientAddress)
+            else:
+                self.login_log(uname, 'Invalid password', self.ClientAddress)
+#        elif not temp == 'True':
+ #           answer_dic = {'type': 'login_answer', 'content': temp}
+  #          print('wait', temp, 'to try again')
 
-        elif not self.check_pass_login(uname, password):
-            answer_dic = {'type': 'login_answer',
-                          'content': 'ERROR : invalid password'}
-            print('invalid password')
-            self.update_login_backoff(uname)
+#        elif not self.check_pass_login(uname, password):
+#            answer_dic = {'type': 'login_answer',
+#                          'content': 'ERROR : invalid password'}
+ #           print('invalid password')
+  #          self.update_login_backoff(uname)
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)

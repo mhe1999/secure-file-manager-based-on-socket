@@ -13,6 +13,7 @@ server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 4379799091495243224771586683345998659539518564067592233261543537102023917893
 9096433733507311626064586608627154087661325313'''.replace('\n', '')), 65537)
 
+ClientAddress=''
 server_privkey = rsa.PrivateKey(int('''1987105457280428302534996355018419873
 4615411796699925324839142031506511723524383033218203850844678435920081218915
 7952437446238994030240705354649533272077457072808161511491126736811598383260
@@ -43,7 +44,7 @@ server_privkey = rsa.PrivateKey(int('''1987105457280428302534996355018419873
 def on_new_client(clientsocket):
     server_socket = server(conn=clientsocket,
                            server_pubkey=server_pubkey,
-                           server_privkey=server_privkey)
+                           server_privkey=server_privkey, ClientAddress=ClientAddress)
     # msg = 'hello world'
     # enc = rsa.encrypt(msg.encode(), server_pubkey)
     # print(enc)
@@ -80,7 +81,7 @@ def on_new_client(clientsocket):
 
 s = socket.socket()
 host = '127.0.0.1'
-port = 65436
+port = 65433
 
 print('Server started!')
 print('Waiting for clients...')
@@ -91,6 +92,7 @@ s.listen(5)
 while True:
     print('hey')
     c, addr = s.accept()
+    ClientAddress = addr
     print('Got connection from', addr)
     _thread.start_new_thread(on_new_client, (c,))
     input()
