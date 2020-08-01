@@ -172,16 +172,29 @@ class socket_conn(cryptography):
 
     def send_message_handler(self, message):
         message_array = message.split()  # FIXME: file names with space
+
         type = message_array[0]
         if type == 'register':
-            self.send_register_command(uname=message_array[1],
-                                       password=message_array[2],
-                                       conf_label=message_array[3],
-                                       integrity_label=message_array[4])
+            if len(message_array) == 5:
+                self.send_register_command(status='correct',
+                                        uname=message_array[1],
+                                        password=message_array[2],
+                                        conf_label=message_array[3],
+                                        integrity_label=message_array[4])
+            else:
+                self.send_register_command(status='wrong', 
+                                           uname='',
+                                           password='',
+                                           conf_label='',
+                                           integrity_label='')
 
         elif type == 'login':
-            self.send_login_command(uname=message_array[1],
-                                    password=message_array[2])
+            if len(message_array) == 3:
+                self.send_login_command(uname=message_array[1],
+                                        password=message_array[2],status = 'correct')
+            else:
+                self.send_login_command(uname='',
+                                        password='', status='wrong')
 
         elif type == 'put':
             self.send_put_command(filename=message_array[1],
@@ -204,19 +217,22 @@ class socket_conn(cryptography):
         else:
             print('not valid input')
 
-    def send_register_command(self, uname, password, conf_label, integrity_label):
+    def send_register_command(self, uname, password, conf_label, integrity_label, status):
         dic_message = {'type': 'register',
-                       'uname': uname,
-                       'password': password,
-                       'conf_label': conf_label,
-                       'integrity_label': integrity_label}
+                    'uname': uname,
+                    'password': password,
+                    'conf_label': conf_label,
+                    'integrity_label': integrity_label,
+                    'status': status}
+
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_login_command(self, uname, password):
+    def send_login_command(self, uname, password, status):
         dic_message = {'type': 'login',
                        'uname': uname,
-                       'password': password}
+                       'password': password
+                       ,'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
@@ -302,7 +318,7 @@ class server(socket_conn):
         f.write(msg)
         f.close()
 
-    def loginChecker_log(self,type, uname, addr):
+    def loginChecker_log(self, type, uname, addr):
         f = open("filemanager.log", "a")
         current_time = datetime.datetime.now()
         if uname == '':
@@ -317,6 +333,29 @@ class server(socket_conn):
         
         f.write(msg)
         f.close()
+
+    def invalidCommand_log(self, type, uname, addr):
+
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        if uname == '':
+            msg = 'commandParameters: ' + type + ', IP address: ' + \
+                str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+                ', @time: ' + str(current_time) + '\n'
+
+        else:
+            msg = 'commandParameters: ' + type + ', username: ' + uname + ', IP address: ' + \
+                str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+                ', @time: ' + str(current_time) + '\n'
+
+        f.write(msg)
+        f.close()
+
+
+
+
+
+
 
 
 
@@ -347,37 +386,46 @@ class server(socket_conn):
 
     def handle_register_command(self, message):
         if self.LoggedFlag == False:
-            print('in register')
-            uname = message['uname']
-            salt = self.base64_encode(os.urandom(12))
-            # returns a string of password + salt
-            password = message['password'] + salt
-            conf_label = int(message['conf_label'])
-            integrity_label = int(message['integrity_label'])
-            if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
-                self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
-                                                VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
-                                    {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
-                self.mydb.commit()
-                answer_dic = {'type': 'register_answer',
-                            'content': 'register successfully'}
-                self.register_log(uname, 'Successful Register', self.ClientAddress)
+            if message['status'] == 'correct':
+                print('in register')
+                uname = message['uname']
+                salt = self.base64_encode(os.urandom(12))
+                # returns a string of password + salt
+                password = message['password'] + salt
+                conf_label = int(message['conf_label'])
+                integrity_label = int(message['integrity_label'])
+                if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
+                    self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
+                                                    VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
+                                        {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
+                    self.mydb.commit()
+                    answer_dic = {'type': 'register_answer',
+                                'content': 'register successfully'}
+                    self.register_log(uname, 'Successful Register', self.ClientAddress)
 
-            elif not self.check_uname(uname):
-                print('duplicate user name')
-                answer_dic = {'type': 'register_answer',
-                            'content': 'ERROR : duplicate user name'}
-                self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
+                elif not self.check_uname(uname):
+                    print('duplicate user name')
+                    answer_dic = {'type': 'register_answer',
+                                'content': 'ERROR : duplicate user name'}
+                    self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
+
+                else:
+                    print('weak password')
+                    answer_dic = {'type': 'register_answer',
+                                'content': 'ERROR : weak password'}
+                    self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
+                answer_json = json.dumps(answer_dic)
+                self.send_message(answer_json)
 
             else:
-                print('weak password')
+                print('wrong parameters')
                 answer_dic = {'type': 'register_answer',
-                            'content': 'ERROR : weak password'}
-                self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
+                              'content': 'ERROR : invalid input, sample command: register <username> <password> <conf.label> <integrity label>'}
+                self.invalidCommand_log('register', self.LoggedUsername, self.ClientAddress)
+                answer_json = json.dumps(answer_dic)
+                self.send_message(answer_json)
 
 
-            answer_json = json.dumps(answer_dic)
-            self.send_message(answer_json)
 
         else:
             print('first must logout')
@@ -391,42 +439,54 @@ class server(socket_conn):
 
     def handle_login_command(self, message):
         print('in login')
-        uname = message['uname']
-        self.LoggedUsername = uname  
-        password = message['password']
 
-#           temp =  self.check_possible_backoff(uname)
-        if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
-            print('login successfully')
-            print(self.user_id)
-            print(self.user_conf)
-            print(self.user_integ)
+        if message['status'] == 'correct':
+            uname = message['uname']
+            self.LoggedUsername = uname  
+            password = message['password']
 
+    #       temp =  self.check_possible_backoff(uname)
+            if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
+                print('login successfully')
+                print(self.user_id)
+                print(self.user_conf)
+                print(self.user_integ)
+
+                answer_dic = {'type': 'login_answer',
+                            'content': 'Login successfully'}
+                self.LoggedFlag = True
+                self.login_log(uname, 'Login successfully', self.ClientAddress)
+
+            elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
+                answer_dic = {'type': 'login_answer',
+                            'content': 'ERROR : invalid username or password'}
+                print('invalid username or password')
+                if (self.check_uname(uname)):
+                    self.login_log(uname, 'Invalid username', self.ClientAddress)
+                else:
+                    self.login_log(uname, 'Invalid password', self.ClientAddress)
+    #        elif not temp == 'True':
+    #           answer_dic = {'type': 'login_answer', 'content': temp}
+    #          print('wait', temp, 'to try again')
+
+    #        elif not self.check_pass_login(uname, password):
+    #            answer_dic = {'type': 'login_answer',
+    #                          'content': 'ERROR : invalid password'}
+    #           print('invalid password')
+    #          self.update_login_backoff(uname)
+
+            answer_json = json.dumps(answer_dic)
+            self.send_message(answer_json)
+
+        else:
             answer_dic = {'type': 'login_answer',
-                          'content': 'Login successfully'}
-            self.LoggedFlag = True
-            self.login_log(uname, 'Login successfully', self.ClientAddress)
+                          'content': 'ERROR: invalid input, sample command: login <username> <password>'}
 
-        elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
-            answer_dic = {'type': 'login_answer',
-                          'content': 'ERROR : invalid username or password'}
-            print('invalid username or password')
-            if (self.check_uname(uname)):
-                self.login_log(uname, 'Invalid username', self.ClientAddress)
-            else:
-                self.login_log(uname, 'Invalid password', self.ClientAddress)
-#        elif not temp == 'True':
- #           answer_dic = {'type': 'login_answer', 'content': temp}
-  #          print('wait', temp, 'to try again')
+            self.invalidCommand_log(
+                'login', self.LoggedUsername, self.ClientAddress)
+            answer_json = json.dumps(answer_dic)
+            self.send_message(answer_json)
 
-#        elif not self.check_pass_login(uname, password):
-#            answer_dic = {'type': 'login_answer',
-#                          'content': 'ERROR : invalid password'}
- #           print('invalid password')
-  #          self.update_login_backoff(uname)
-
-        answer_json = json.dumps(answer_dic)
-        self.send_message(answer_json)
 
     def handle_put_command(self, message):
         print('in put')
