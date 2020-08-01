@@ -164,7 +164,7 @@ class socket_conn(cryptography):
         elif message['type'] == 'get_answer':
             self.handle_get_answer_command(message)
         elif message['type'] == 'ls':
-            self.handle_ls_command()
+            self.handle_ls_command(message)
         elif message['type'] == 'ls_answer':
             self.handle_ls_answer_command(message)
         else:
@@ -196,23 +196,42 @@ class socket_conn(cryptography):
                 self.send_login_command(uname='',
                                         password='', status='wrong')
 
+      
         elif type == 'put':
             self.send_put_command(filename=message_array[1],
                                   conf_label=message_array[2],
                                   integrity_label=message_array[3])
 
+        # FIXME: for impelement DAC
+
+      
         elif type == 'read':
-            self.send_read_command(filename=message_array[1])
-
+            if len(message_array) == 2:
+                self.send_read_command(
+                    filename=message_array[1], status='correct')
+            else:
+                self.send_read_command(filename='',status='wrong')
+      
         elif type == 'write':
-            self.send_write_command(filename=message_array[1],
-                                    content=message_array[2])
-
+            if len(message_array) == 3:
+                self.send_write_command(filename=message_array[1],
+                                        content=message_array[2],
+                                        status='correct')
+            else:
+                self.send_write_command(filename='',
+                                        content='',
+                                        status='wrong')
         elif type == 'get':
-            self.send_get_command(filename=message_array[1])
+            if len(message_array) == 2:
+                self.send_get_command(filename=message_array[1], status='correct')
+            else:
+                self.send_get_command(filename='', status='wrong')
 
         elif type == 'ls':
-            self.send_ls_command()
+            if len(message_array) == 1:
+                self.send_ls_command(status='correct')
+            else:
+                self.send_ls_command(status='wrong')
 
         else:
             print('not valid input')
@@ -247,27 +266,31 @@ class socket_conn(cryptography):
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_read_command(self, filename):
+    def send_read_command(self, filename, status):
         dic_message = {'type': 'read',
-                       'filename': filename}
+                       'filename': filename,
+                       'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_write_command(self, filename, content):
+    def send_write_command(self, filename, content, status):
         dic_message = {'type': 'write',
                        'filename': filename,
-                       'content': content}
+                       'content': content,
+                       'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_get_command(self, filename):
+    def send_get_command(self, filename, status):
         dic_message = {'type': 'get',
-                       'filename': filename}
+                       'filename': filename,
+                       'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_ls_command(self):
-        dic_message = {'type': 'ls'}
+    def send_ls_command(self, status):
+        dic_message = {'type': 'ls',
+                        'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
@@ -305,7 +328,7 @@ class server(socket_conn):
     def ls_log(self, uname, addr):
         f = open("filemanager.log", "a")
         current_time = datetime.datetime.now()
-        msg = 'ls: ' + ', username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
+        msg = 'ls: ' + ' username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
         f.write(msg)
         f.close()
 
@@ -507,28 +530,40 @@ class server(socket_conn):
         self.send_message(answer_json)
 
     def handle_read_command(self, message):
-        print('in read')
-        if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
-            file = open(message['filename'], 'rb')
-            content = file.read()
-            content_base64 = self.base64_encode(content)
-            content_dic = {'type': 'read_answer', 'content': content_base64}
-            print('read successfully, sending data to client')
-        elif self.check_file_name(message['filename']):
-            print('no such file')
+        if self.LoggedFlag == True:
+            if message['status'] == 'correct':
+                if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
+                    file = open(message['filename'], 'rb')
+                    content = file.read()
+                    content_base64 = self.base64_encode(content)
+                    content_dic = {'type': 'read_answer', 'content': content_base64}
+                    print('read successfully, sending data to client')
+                elif self.check_file_name(message['filename']):
+                    print('no such file')
+                    content_dic = {'type': 'read_answer',
+                                'content': 'ERROR : no such file'}
+                elif not self.check_BLP_read(message['filename']):
+                    print('not BLP authorize')
+                    content_dic = {'type': 'read_answer',
+                                'content': 'ERROR : not BLP authorize'}
+                elif not self.check_BIBA_read(message['filename']):
+                    print('not BIBA authorize')
+                    content_dic = {'type': 'read_answer',
+                                'content': 'ERROR : not BIBA authorize'}
+            else:
+                content_dic = {'type': 'read_answer',
+                               'content': 'ERROR: invalid input, sample command: read <filename>'}
+                                
+        else:
             content_dic = {'type': 'read_answer',
-                           'content': 'ERROR : no such file'}
-        elif not self.check_BLP_read(message['filename']):
-            print('not BLP authorize')
-            content_dic = {'type': 'read_answer',
-                           'content': 'ERROR : not BLP authorize'}
-        elif not self.check_BIBA_read(message['filename']):
-            print('not BIBA authorize')
-            content_dic = {'type': 'read_answer',
-                           'content': 'ERROR : not BIBA authorize'}
+                           'content': 'ERROR: must be logged in'}
+            self.loginChecker_log(
+                'read', self.LoggedUsername, self.ClientAddress)
+
 
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
+
 
     def handle_write_command(self, message):  # FIXME: messages with spaces
         print('in write')
@@ -558,28 +593,34 @@ class server(socket_conn):
         
         if self.LoggedFlag == True:                
             print('in get')
-            if not self.check_file_name(message['filename']):
-                file = open(message['filename'], 'rb')
-                content = file.read()
-                content_base64 = self.base64_encode(content)
-                content_dic = {'type': 'get_answer',
-                            'content': content_base64, 'filename': message['filename']}
-                print('read successfully, sending data to client')
-                self.get_log('read successfully, sending data to client',
-                            message['filename'], self.LoggedUsername, self.ClientAddress)
+            if message['status'] == 'correct':
+                if not self.check_file_name(message['filename']):
+                    #FIXME: check if file not exist
+                    file = open(message['filename'], 'rb')
+                    content = file.read()
+                    content_base64 = self.base64_encode(content)
+                    content_dic = {'type': 'get_answer',
+                                'content': content_base64, 'filename': message['filename']}
+                    print('read successfully, sending data to client')
+                    self.get_log('read successfully, sending data to client',
+                                message['filename'], self.LoggedUsername, self.ClientAddress)
 
-                
-                # FIXME: delete file
-                #FIXME : dont check who is owner
+                    
+                    # FIXME: delete file
+                    #FIXME : dont check who is owner
+
+                else:
+                    content_dic = {'type': 'get_answer',
+                                'content': 'ERROR : no such file'}
+                    self.get_log('no such file',
+                                message['filename'], self.LoggedUsername, self.ClientAddress)
+                    
+
             else:
-                print('no such file')
                 content_dic = {'type': 'get_answer',
-                            'content': 'ERROR : no such file'}
-                self.get_log('no such file',
-                            message['filename'], self.LoggedUsername, self.ClientAddress)
-
-            content_json = json.dumps(content_dic)
-            self.send_message(content_json)
+                               'content': 'ERROR: invalid input, sample command: get <filename>'}
+                self.invalidCommand_log(
+                    'get', self.LoggedUsername, self.ClientAddress)
 
 
         else:
@@ -587,21 +628,33 @@ class server(socket_conn):
             content_dic = {'type': 'get_answer',
                            'content': 'ERROR: must be logged in'}
             self.loginChecker_log(
-                'Get', self.LoggedUsername, self.ClientAddress)
-            content_json = json.dumps(content_dic)
-            self.send_message(content_json)
+                'get', self.LoggedUsername, self.ClientAddress)
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
 
-    def handle_ls_command(self):
+    
+    def handle_ls_command(self,message):
         if self.LoggedFlag == True:                
-            print('in ls...')
-            self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
-                                FROM users as u inner join files as f on(u.ID = f.ownerID)
-                                inner join conf on(f.conf_label = conf.ID)
-                                inner join integrity on (f.integ_label = integrity.ID)""")
-            content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
-            content_json = json.dumps(content_dic)
-            self.ls_log(self.LoggedUsername, self.ClientAddress)
-            self.send_message(content_json)
+            if message['status'] == 'correct':
+                print('in ls...')
+                self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
+                                    FROM users as u inner join files as f on(u.ID = f.ownerID)
+                                    inner join conf on(f.conf_label = conf.ID)
+                                    inner join integrity on (f.integ_label = integrity.ID)""")
+                content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
+                content_json = json.dumps(content_dic)
+                self.ls_log(self.LoggedUsername, self.ClientAddress)
+                self.send_message(content_json)
+
+            else:
+                answer_dic = {'type': 'ls_answer',
+                            'content': 'ERROR: invalid input, sample command: ls'}
+
+                self.invalidCommand_log(
+                    'ls', self.LoggedUsername, self.ClientAddress)
+                answer_json = json.dumps(answer_dic)
+                self.send_message(answer_json)
+
 
         else:
             print('must be logged in for ls command')
@@ -759,10 +812,10 @@ class clients(socket_conn):
 
     def handle_read_answer_command(self, message):
         print('in read answer...')
-        if not message['content'] == 'ERROR : no such file' and not message['content'] == 'ERROR : not BLP authorize' and not message['content'] == 'ERROR : not BIBA authorize':
-            print(self.base64_decode(message['content']).decode())
-        else:
+        if 'ERROR' in message['content']:
             print(message['content'])
+        else:
+            print(self.base64_decode(message['content']).decode())
 
     def handle_ls_answer_command(self, message):
         if 'ERROR' in message['content']:
