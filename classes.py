@@ -522,9 +522,8 @@ class server(socket_conn):
     def handle_put_command(self, message):
         print('in put')
         # FIXME: file name without .txt
-        if self.check_file_name(message['filename'].split('.')[0] + '_server.' + message['filename'].split('.')[1]):
-            file = open(message['filename'].split('.')[
-                        0] + '_server.' + message['filename'].split('.')[1], 'wb')  # FIXME: file name without .txt
+        if self.check_file_name(message['filename']):
+            file = open('serverFiles/' + message['filename'], 'wb')  # FIXME: file name without .txt
             file.write(self.base64_decode(message['file']))
             self.add_file_to_database(message)
             answer_dic = {'type': 'put_answer',
@@ -743,8 +742,7 @@ class server(socket_conn):
             return True
 
     def add_file_to_database(self, message):
-        fname = message['filename'].split(
-            '.')[0] + '_server.' + message['filename'].split('.')[1]  # FIXME: file name without .txt
+        fname = message['filename']
         conf_label = int(message['conf_label'])
         integ_label = int(message['integrity_label'])
         owner_id = self.user_id  # FIXME: owner_id = self.user_id
@@ -882,7 +880,7 @@ class clients(socket_conn):
         if 'ERROR' in message['content']:
             print(message['content'])
         else:
-            file = open('1' + message['filename'], 'wb')
+            file = open('clientFiles/' + message['filename'], 'wb')
             file.write(self.base64_decode(message['content']))
 
     def handle_invalid_answer_command(self,message):
