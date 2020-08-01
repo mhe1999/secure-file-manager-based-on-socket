@@ -265,6 +265,7 @@ class server(socket_conn):
         self.database_connection()
         self.ClientAddress = ClientAddress
         self.LoggedUsername = ''
+        self.LoggedFlag = False
         print(self.ClientAddress)
     
     def login_log(self,uname,status, addr):
@@ -301,6 +302,22 @@ class server(socket_conn):
         f.write(msg)
         f.close()
 
+    def loginChecker_log(self,type, uname, addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        if uname == '':
+            msg = 'Access: ' + type + ', IP address: ' + \
+                str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+                ', @time: ' + str(current_time) + '\n'
+
+        else:
+            msg = 'Access: ' + type + ', username: ' + uname + ', IP address: ' + \
+                str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+                ', @time: ' + str(current_time) + '\n'
+        
+        f.write(msg)
+        f.close()
+
 
 
     def database_connection(self):
@@ -329,43 +346,55 @@ class server(socket_conn):
         self.session_key = self.base64_decode(session_key_dic['value'])
 
     def handle_register_command(self, message):
-        print('in register')
-        uname = message['uname']
-        salt = self.base64_encode(os.urandom(12))
-        # returns a string of password + salt
-        password = message['password'] + salt
-        conf_label = int(message['conf_label'])
-        integrity_label = int(message['integrity_label'])
-        if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
-            self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
-                                            VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
-                                {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
-            self.mydb.commit()
-            answer_dic = {'type': 'register_answer',
-                          'content': 'register successfully'}
-            self.register_log(uname, 'Successful Register', self.ClientAddress)
+        if self.LoggedFlag == False:
+            print('in register')
+            uname = message['uname']
+            salt = self.base64_encode(os.urandom(12))
+            # returns a string of password + salt
+            password = message['password'] + salt
+            conf_label = int(message['conf_label'])
+            integrity_label = int(message['integrity_label'])
+            if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
+                self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
+                                                VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
+                                    {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
+                self.mydb.commit()
+                answer_dic = {'type': 'register_answer',
+                            'content': 'register successfully'}
+                self.register_log(uname, 'Successful Register', self.ClientAddress)
 
-        elif not self.check_uname(uname):
-            print('duplicate user name')
-            answer_dic = {'type': 'register_answer',
-                          'content': 'ERROR : duplicate user name'}
-            self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
+            elif not self.check_uname(uname):
+                print('duplicate user name')
+                answer_dic = {'type': 'register_answer',
+                            'content': 'ERROR : duplicate user name'}
+                self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
+
+            else:
+                print('weak password')
+                answer_dic = {'type': 'register_answer',
+                            'content': 'ERROR : weak password'}
+                self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
+
+
+            answer_json = json.dumps(answer_dic)
+            self.send_message(answer_json)
 
         else:
-            print('weak password')
+            print('first must logout')
             answer_dic = {'type': 'register_answer',
-                          'content': 'ERROR : weak password'}
-            self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
+                          'content': 'ERROR : You must log out before you can register'}
+            answer_json = json.dumps(answer_dic)
+            self.loginChecker_log('register', self.LoggedUsername, self.ClientAddress)
+            self.send_message(answer_json)
 
 
-        answer_json = json.dumps(answer_dic)
-        self.send_message(answer_json)
 
     def handle_login_command(self, message):
         print('in login')
         uname = message['uname']
-        self.LoggedUsername = uname
+        self.LoggedUsername = uname  
         password = message['password']
+
 #           temp =  self.check_possible_backoff(uname)
         if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
             print('login successfully')
@@ -375,6 +404,7 @@ class server(socket_conn):
 
             answer_dic = {'type': 'login_answer',
                           'content': 'Login successfully'}
+            self.LoggedFlag = True
             self.login_log(uname, 'Login successfully', self.ClientAddress)
 
         elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
@@ -465,41 +495,61 @@ class server(socket_conn):
         self.send_message(content_json)
 
     def handle_get_command(self, message):
-        print('in get')
-        if not self.check_file_name(message['filename']):
-            file = open(message['filename'], 'rb')
-            content = file.read()
-            content_base64 = self.base64_encode(content)
-            content_dic = {'type': 'get_answer',
-                           'content': content_base64, 'filename': message['filename']}
-            print('read successfully, sending data to client')
-            self.get_log('read successfully, sending data to client',
-                         message['filename'], self.LoggedUsername, self.ClientAddress)
+        
+        if self.LoggedFlag == True:                
+            print('in get')
+            if not self.check_file_name(message['filename']):
+                file = open(message['filename'], 'rb')
+                content = file.read()
+                content_base64 = self.base64_encode(content)
+                content_dic = {'type': 'get_answer',
+                            'content': content_base64, 'filename': message['filename']}
+                print('read successfully, sending data to client')
+                self.get_log('read successfully, sending data to client',
+                            message['filename'], self.LoggedUsername, self.ClientAddress)
 
-            
-            # FIXME: delete file
-            #FIXME : dont check who is owner
+                
+                # FIXME: delete file
+                #FIXME : dont check who is owner
+            else:
+                print('no such file')
+                content_dic = {'type': 'get_answer',
+                            'content': 'ERROR : no such file'}
+                self.get_log('no such file',
+                            message['filename'], self.LoggedUsername, self.ClientAddress)
+
+            content_json = json.dumps(content_dic)
+            self.send_message(content_json)
+
+
         else:
-            print('no such file')
+            print('must be logged in')
             content_dic = {'type': 'get_answer',
-                           'content': 'ERROR : no such file'}
-            self.get_log('no such file',
-                         message['filename'], self.LoggedUsername, self.ClientAddress)
-
-
-        content_json = json.dumps(content_dic)
-        self.send_message(content_json)
+                           'content': 'ERROR: must be logged in'}
+            self.loginChecker_log(
+                'Get', self.LoggedUsername, self.ClientAddress)
+            content_json = json.dumps(content_dic)
+            self.send_message(content_json)
 
     def handle_ls_command(self):
-        print('in ls...')
-        self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
-                               FROM users as u inner join files as f on(u.ID = f.ownerID)
-				               inner join conf on(f.conf_label = conf.ID)
-                               inner join integrity on (f.integ_label = integrity.ID)""")
-        content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
-        content_json = json.dumps(content_dic)
-        self.ls_log(self.LoggedUsername, self.ClientAddress)
-        self.send_message(content_json)
+        if self.LoggedFlag == True:                
+            print('in ls...')
+            self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
+                                FROM users as u inner join files as f on(u.ID = f.ownerID)
+                                inner join conf on(f.conf_label = conf.ID)
+                                inner join integrity on (f.integ_label = integrity.ID)""")
+            content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
+            content_json = json.dumps(content_dic)
+            self.ls_log(self.LoggedUsername, self.ClientAddress)
+            self.send_message(content_json)
+
+        else:
+            print('must be logged in for ls command')
+            content_dic = {'type': 'ls_answer', 'content': 'ERROR: must be logged in'}
+            self.loginChecker_log('ls', self.LoggedUsername, self.ClientAddress)
+            content_json = json.dumps(content_dic)
+            self.send_message(content_json)
+
 
     def check_uname(self, uname):
         self.cursor.execute(
@@ -655,12 +705,15 @@ class clients(socket_conn):
             print(message['content'])
 
     def handle_ls_answer_command(self, message):
-        print('file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
-              'confidentiality'.ljust(15), '|', 'integiry'.ljust(20))
-        print('-'*68)
-        for row in message['content']:
-            print(row[0].ljust(20), '|', row[1].ljust(10),
-                  '|', row[2].ljust(15), '|', row[3].ljust(20))
+        if 'ERROR' in message['content']:
+            print(message['content'])
+        else:                
+            print('file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
+                'confidentiality'.ljust(15), '|', 'integiry'.ljust(20))
+            print('-'*68)
+            for row in message['content']:
+                print(row[0].ljust(20), '|', row[1].ljust(10),
+                    '|', row[2].ljust(15), '|', row[3].ljust(20))
 
     def handle_register_answer_command(self, message):
         print(message['content'])
@@ -677,11 +730,11 @@ class clients(socket_conn):
     def handle_get_answer_command(self, message):
         # file.write(self.base64_decode(message['content']))
         # self.add_file_to_database(message)
-        if not message['content'] == 'ERROR : no such file':
+        if 'ERROR' in message['content']:
+            print(message['content'])
+        else:
             file = open('1' + message['filename'], 'wb')
             file.write(self.base64_decode(message['content']))
-        else:
-            print(message['content'])
 
 
 class files():
