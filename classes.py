@@ -264,6 +264,7 @@ class server(socket_conn):
         self.server_privkey = server_privkey
         self.database_connection()
         self.ClientAddress = ClientAddress
+        self.LoggedUsername = ''
         print(self.ClientAddress)
     
     def login_log(self,uname,status, addr):
@@ -283,6 +284,22 @@ class server(socket_conn):
         f.write(msg)
         f.close()
 
+
+    def ls_log(self, uname, addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'ls: ' + ', username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
+        f.write(msg)
+        f.close()
+
+    def get_log(self, status, filename, uname, addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'Get: ' + status + ', Filename: '+ filename + ', username: ' + uname + ', IP address: ' + \
+            str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+            ', @time: ' + str(current_time) + '\n'
+        f.write(msg)
+        f.close()
 
 
 
@@ -347,6 +364,7 @@ class server(socket_conn):
     def handle_login_command(self, message):
         print('in login')
         uname = message['uname']
+        self.LoggedUsername = uname
         password = message['password']
 #           temp =  self.check_possible_backoff(uname)
         if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
@@ -455,11 +473,19 @@ class server(socket_conn):
             content_dic = {'type': 'get_answer',
                            'content': content_base64, 'filename': message['filename']}
             print('read successfully, sending data to client')
+            self.get_log('read successfully, sending data to client',
+                         message['filename'], self.LoggedUsername, self.ClientAddress)
+
+            
             # FIXME: delete file
+            #FIXME : dont check who is owner
         else:
             print('no such file')
             content_dic = {'type': 'get_answer',
                            'content': 'ERROR : no such file'}
+            self.get_log('no such file',
+                         message['filename'], self.LoggedUsername, self.ClientAddress)
+
 
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
@@ -472,6 +498,7 @@ class server(socket_conn):
                                inner join integrity on (f.integ_label = integrity.ID)""")
         content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
         content_json = json.dumps(content_dic)
+        self.ls_log(self.LoggedUsername, self.ClientAddress)
         self.send_message(content_json)
 
     def check_uname(self, uname):
