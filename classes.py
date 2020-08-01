@@ -167,8 +167,10 @@ class socket_conn(cryptography):
             self.handle_ls_command(message)
         elif message['type'] == 'ls_answer':
             self.handle_ls_answer_command(message)
+        elif message['type'] == 'invalid_answer' :
+            self.handle_invalid_answer_command(message)
         else:
-            print('not vaild')
+            self.handle_invalid_command()
 
     def send_message_handler(self, message):
         message_array = message.split()  # FIXME: file names with space
@@ -234,7 +236,7 @@ class socket_conn(cryptography):
                 self.send_ls_command(status='wrong')
 
         else:
-            print('not valid input')
+            self.send_invalid_command(status='invalid')
 
     def send_register_command(self, uname, password, conf_label, integrity_label, status):
         dic_message = {'type': 'register',
@@ -293,6 +295,12 @@ class socket_conn(cryptography):
                         'status': status}
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
+
+    def send_invalid_command(self,status):
+        dic_message = {'type':'invalid'}
+        json_message = json.dumps(dic_message)
+        self.send_message(json_message)
+
 
 ##################################################################################################################################################################
 
@@ -530,7 +538,7 @@ class server(socket_conn):
         self.send_message(answer_json)
 
     def handle_read_command(self, message):
-        if self.LoggedFlag == True:
+        if self.LoggedFlag == True: #FIXME: blp,biba, DAC log 
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
                     file = open(message['filename'], 'rb')
@@ -551,9 +559,12 @@ class server(socket_conn):
                     content_dic = {'type': 'read_answer',
                                 'content': 'ERROR : not BIBA authorize'}
             else:
+                #FIXME:add log
                 content_dic = {'type': 'read_answer',
-                               'content': 'ERROR: invalid input, sample command: read <filename>'}
-                                
+                               'content': 'ERROR: invalid input, sample command: read <filename>'}       
+                self.invalidCommand_log(
+                    'read', self.LoggedUsername, self.ClientAddress)
+
         else:
             content_dic = {'type': 'read_answer',
                            'content': 'ERROR: must be logged in'}
@@ -566,26 +577,41 @@ class server(socket_conn):
 
 
     def handle_write_command(self, message):  # FIXME: messages with spaces
+        #FIXME : biba and blp logs
         print('in write')
-        if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
-            file = open(message['filename'], 'wt')
-            file.write(message['content'])
-            print('write successfully')
-            content_dic = {'type': 'write_answer',
-                           'content': 'writing in file done successfully'}
-        elif self.check_file_name(message['filename']):
-            print('no such file')
-            content_dic = {'type': 'write_answer',
-                           'content': 'ERROR : no such file'}
-        elif not self.check_BIBA_write(message['filename']):
-            print('no such file')
-            content_dic = {'type': 'write_answer',
-                           'content': 'ERROR : not BIBA authorize'}
-        elif self.check_BLP_write(message['filename']):
-            print('no such file')
-            content_dic = {'type': 'write_answer',
-                           'content': 'ERROR : not BLP authorize'}
+        if self.LoggedFlag == True:
+            if message['status'] == 'correct':
+                if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
+                    file = open(message['filename'], 'wt')
+                    file.write(message['content'])
+                    print('write successfully')
+                    content_dic = {'type': 'write_answer',
+                                'content': 'writing in file done successfully'}
+                elif self.check_file_name(message['filename']):
+                    print('no such file')
+                    content_dic = {'type': 'write_answer',
+                                'content': 'ERROR : no such file'}
+                elif not self.check_BIBA_write(message['filename']):
+                    print('no such file')
+                    content_dic = {'type': 'write_answer',
+                                'content': 'ERROR : not BIBA authorize'}
+                elif self.check_BLP_write(message['filename']):
+                    print('no such file')
+                    content_dic = {'type': 'write_answer',
+                                'content': 'ERROR : not BLP authorize'}
 
+            else:
+                content_dic = {'type': 'write_answer',
+                               'content': 'ERROR: invalid input, sample command: write <filename> <content>'}
+                self.invalidCommand_log(
+                    'write', self.LoggedUsername, self.ClientAddress)
+
+        else:
+            print('must be logged in')
+            content_dic = {'type': 'write_answer',
+                           'content': 'ERROR: must be logged in'}
+            self.loginChecker_log(
+                'write', self.LoggedUsername, self.ClientAddress)
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
 
@@ -636,32 +662,42 @@ class server(socket_conn):
     def handle_ls_command(self,message):
         if self.LoggedFlag == True:                
             if message['status'] == 'correct':
-                print('in ls...')
                 self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
                                     FROM users as u inner join files as f on(u.ID = f.ownerID)
                                     inner join conf on(f.conf_label = conf.ID)
                                     inner join integrity on (f.integ_label = integrity.ID)""")
+                self.ls_log(self.LoggedUsername, self.ClientAddress)
                 content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
                 content_json = json.dumps(content_dic)
-                self.ls_log(self.LoggedUsername, self.ClientAddress)
-                self.send_message(content_json)
 
             else:
-                answer_dic = {'type': 'ls_answer',
+                content_dic = {'type': 'ls_answer',
                             'content': 'ERROR: invalid input, sample command: ls'}
 
                 self.invalidCommand_log(
                     'ls', self.LoggedUsername, self.ClientAddress)
-                answer_json = json.dumps(answer_dic)
-                self.send_message(answer_json)
 
 
         else:
             print('must be logged in for ls command')
             content_dic = {'type': 'ls_answer', 'content': 'ERROR: must be logged in'}
             self.loginChecker_log('ls', self.LoggedUsername, self.ClientAddress)
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
+
+    def handle_invalid_command(self):
+        if self.LoggedFlag == False:
+            content_dic = {'type': 'invalid_answer', 'content': 'invalid input, sample commands:\nlogin <username> <password>\nregister <username> <password> <conf.label> <integrity label>'}
             content_json = json.dumps(content_dic)
-            self.send_message(content_json)
+        else:
+            content_dic = {'type': 'invalid_answer',
+                           'content': 'invalid input, sample commands:\nread <filename>\nwrite <filename> <content>\nls\nget <filename>\nput <filename> <conf.label> <integrity label>'}
+            content_json = json.dumps(content_dic)
+
+        self.invalidCommand_log(
+            'invalid type', self.LoggedUsername, self.ClientAddress)
+        content_json = json.dumps(content_dic)
+        self.send_message(content_json)
 
 
     def check_uname(self, uname):
@@ -849,6 +885,8 @@ class clients(socket_conn):
             file = open('1' + message['filename'], 'wb')
             file.write(self.base64_decode(message['content']))
 
+    def handle_invalid_answer_command(self,message):
+        print(message['content'])
 
 class files():
     pass
