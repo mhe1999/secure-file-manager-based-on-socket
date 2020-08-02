@@ -138,7 +138,6 @@ class socket_conn(cryptography):
         # message = {'type' : login, ...} ---> dict
         message = json.loads(message_json)
         if message['type'] == 'register':
-            # FIXME: user input is name of BLP and BIBA levels, not number
             self.handle_register_command(message)
         elif message['type'] == 'register_answer':
             self.handle_register_answer_command(message)
@@ -212,7 +211,6 @@ class socket_conn(cryptography):
                                     types='', 
                                     status='wrong' ) 
                 
-        # FIXME: for impelement DAC
 
       
         elif type == 'read':
@@ -536,7 +534,6 @@ class server(socket_conn):
 
     def handle_put_command(self, message):
         #FIXME : log
-        print('in put')
         if self.LoggedFlag == True:
             if message['status'] == 'correct':
                 if os.path.isfile(message['filename']):
@@ -784,14 +781,23 @@ class server(socket_conn):
 
     def add_file_to_database(self, message):
         fname = message['filename']
+        owner_id = self.user_id  
+        mode = message['types']
+
         if message['types'] == 'blp' or message['types'] == 'biba':
             conf_label = int(message['param1'])
             integ_label = int(message['param2'])
-            owner_id = self.user_id  
-            mode = message['types']
             self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID, mode  )
                                     VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s, %(mode)s )""",
                                 {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id, 'mode': mode})
+
+        elif message['types'] == 'dac': #FIXME: check access in range rwx
+            conf_label = int(message['param1'])
+            integ_label = message['param2']
+            self.cursor.execute(""" INSERT INTO files(fname, ownerID, userID, access, mode)
+                                    VALUES(%(fname)s,%(owner_id)s,%(userID)s,%(access)s, %(mode)s)""",
+                                {'fname': fname, 'userID': conf_label, 'access': integ_label, 'owner_id': owner_id, 'mode':mode})
+        
         self.mydb.commit()
 
     def check_BLP_read(self, filename):
