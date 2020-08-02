@@ -601,26 +601,48 @@ class server(socket_conn):
         self.send_message(answer_json)
 
     def handle_read_command(self, message):
-        if self.LoggedFlag == True: #FIXME: blp,biba, DAC log 
+        if self.LoggedFlag == True:
             if message['status'] == 'correct':
-                if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
-                    file = open(message['filename'], 'rb')
-                    content = file.read()
-                    content_base64 = self.base64_encode(content)
-                    content_dic = {'type': 'read_answer', 'content': content_base64}
-                    print('read successfully, sending data to client')
-                elif self.check_file_name(message['filename']):
-                    print('no such file')
-                    content_dic = {'type': 'read_answer',
-                                'content': 'ERROR : no such file'}
-                elif not self.check_BLP_read(message['filename']):
-                    print('not BLP authorize')
-                    content_dic = {'type': 'read_answer',
-                                'content': 'ERROR : not BLP authorize'}
-                elif not self.check_BIBA_read(message['filename']):
-                    print('not BIBA authorize')
-                    content_dic = {'type': 'read_answer',
-                                'content': 'ERROR : not BIBA authorize'}
+                if not self.check_file_name(message['filename']):
+                    controlAccess = self.file_controlAccess(message['filename'])
+
+                    if controlAccess == 'mac':
+                        if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
+                            file = open(message['filename'], 'rb')
+                            content = file.read()
+                            content_base64 = self.base64_encode(content)
+                            content_dic = {'type': 'read_answer', 'content': content_base64}
+                            print('read successfully, sending data to client')
+                        elif self.check_file_name(message['filename']):
+                            print('no such file')
+                            content_dic = {'type': 'read_answer',
+                                        'content': 'ERROR : no such file'}
+                        elif not self.check_BLP_read(message['filename']):
+                            print('not BLP authorize')
+                            content_dic = {'type': 'read_answer',
+                                        'content': 'ERROR : not BLP authorize'}
+                        elif not self.check_BIBA_read(message['filename']):
+                            print('not BIBA authorize')
+                            content_dic = {'type': 'read_answer',
+                                        'content': 'ERROR : not BIBA authorize'}
+
+                    elif controlAccess == 'dac':
+                        if self.check_file_access('read', message['filename'], self.user_id):
+                            file = open(message['filename'], 'rb')
+                            content = file.read()
+                            content_base64 = self.base64_encode(content)
+                            content_dic = {'type': 'read_answer',
+                                           'content': content_base64}
+                            print('read successfully, sending data to client DAC')
+                        else:
+                            content_dic = {'type': 'read_answer',
+                                           'content': 'ERROR : Access denied for read'}
+
+                else:
+                    content_dic = {'type': 'get_answer',
+                                   'content': 'ERROR : no such file'}
+
+                    #log file
             else:
                 #FIXME:add log
                 content_dic = {'type': 'read_answer',
@@ -681,7 +703,6 @@ class server(socket_conn):
 
     def handle_get_command(self, message):        
         if self.LoggedFlag == True:                
-            print('in get')
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']):
                     controlAccess = self.file_controlAccess(message['filename'])
@@ -704,7 +725,7 @@ class server(socket_conn):
                             
                             self.AccessDenied_log('get', self.LoggedUsername, self.ClientAddress, message['filename'])
                     elif controlAccess == 'dac':
-                        if self.check_file_access(message['filename'], self.user_id):
+                        if self.check_file_access('get',message['filename'], self.user_id):
                             file = open(message['filename'], 'rb')
                             content = file.read()
                             content_base64 = self.base64_encode(content)
@@ -1029,15 +1050,16 @@ class server(socket_conn):
         file_table = self.cursor.fetchall()
         return file_table[0][0]
 
-    def check_file_access(self, fname, userID):
+    def check_file_access(self, types,fname, userID):
         
         self.cursor.execute(""" SELECT COUNT(*)
                                 FROM files
                                 WHERE fname = %(fname)s  and ownerID = %(ownerID)s""", {'fname': fname, 'ownerID':userID})
         file_table = self.cursor.fetchall()
+
         if int(file_table[0][0]) > 0:
             return True
- 
+
         self.cursor.execute(""" SELECT COUNT(*)
                                 FROM files
                                 WHERE fname = %(fname)s and  userID = %(userID)s""", {'fname': fname,  'userID': userID})
@@ -1047,13 +1069,24 @@ class server(socket_conn):
                                     FROM files
                                     WHERE fname = %(fname)s and  userID = %(userID)s""", {'fname': fname,  'userID': userID})
             file_table = self.cursor.fetchall()
-            if 'x' in file_table[0][0]:
-                return True
-            else:
-                return False
+            
+            if types == 'get':
+                if 'x' in file_table[0][0]:
+                    return True
+                else:
+                    return False
+            elif types == 'read':        
+                if 'r' in file_table[0][0]:
+                    return True
+                else:
+                    return False
+            elif types == 'write':
+                if 'w' in file_table[0][0]:
+                    return True
+                else:
+                    return False
         else:
             return False
-
 
 ##############################################################
 class clients(socket_conn):
