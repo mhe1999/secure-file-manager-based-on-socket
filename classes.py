@@ -202,8 +202,15 @@ class socket_conn(cryptography):
                 self.send_put_command(filename=message_array[1],
                                     param1=message_array[2], #conf or userid 
                                     param2=message_array[3], #integr or access
-                                    types=message_array[4], #type (blp,biba),dac
+                                    types=message_array[4], #type mac,dac
                                     status='correct' ) 
+            elif len(message_array) == 4:
+                self.send_put_command(filename=message_array[1],
+                                    param1=message_array[2], #conf or userid 
+                                    param2=message_array[3], #integr or access
+                                    types='mac', #type (blp,biba),dac
+                                    status='correct' ) 
+
             else:
                 self.send_put_command(filename='',
                                     param1='',  
@@ -534,17 +541,41 @@ class server(socket_conn):
 
     def handle_put_command(self, message):
         #FIXME : log
+        
         if self.LoggedFlag == True:
             if message['status'] == 'correct':
-                if os.path.isfile(message['filename']):
-                    if self.check_file_name(message['filename']): #check file duplicate
+                if os.path.isfile(message['filename']):#check file exist
+                    if self.check_file_name(message['filename']) or (message['types'] == 'dac'): #check file duplicate
                             file1 = open(message['filename'], 'rb')
                             content = self.base64_encode(file1.read())
                             file = open('serverFiles/' + message['filename'], 'wb') 
                             file.write(self.base64_decode(content))
-                            self.add_file_to_database(message)
-                            answer_dic = {'type': 'put_answer',
-                                        'content': 'File put in server successfully'}
+                            result = self.add_file_to_database(message)
+                            if result == 'mustBeDigit':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'ERROR: put command sample :\nput <filename> <conf(int)(int 1<= <=4)> <integ(int 1<= <=4)> mac (optional)\nput <filename> <userID(int)> <access> dac'}
+                            elif result == 'mustBeRightAccess':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'ERROR: put command sample :\nput <filename> <userID> <access(in rang rwx,- )> dac'}
+                            elif result == 'userNotExist':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'ERROR: user not exist'}
+                            elif result == 'duplicateFile':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'ERROR: duplicated file'}
+                            elif result == 'addAnotherUserAccess':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'add access for this user'}
+                            elif result == 'updateUserAccess':
+                                answer_dic = {'type': 'put_answer',
+                                              'content': 'change access for this user'}
+                            else:    
+                                if message['types'] == 'dac' or message['types'] == 'mac':
+                                    answer_dic = {'type': 'put_answer',
+                                                'content': 'File put in server successfully'}
+                                else:
+                                    answer_dic = {'type': 'put_answer',
+                                                  'content': 'ERROR: put command sample :\nput <filename> <conf> <integ> mac (optional)\nput <filename> <userID> <access> dac'}
 
                     else:
                         answer_dic = {'type': 'put_answer',
@@ -554,7 +585,7 @@ class server(socket_conn):
                                 'content': 'ERROR : no such file'}
             else:
                 answer_dic = {'type': 'put_answer',
-                               'content': 'ERROR: invalid input, sample command: put <filename> <conf/userID> <integ/access> <<blp/biba>/dac>'}
+                              'content': 'ERROR: invalid input, sample command:\nput <filename> <conf/userID> <integ/access> <<blp/biba>/dac>'}
                 self.invalidCommand_log(
                     'put', self.LoggedUsername, self.ClientAddress)
 
@@ -783,22 +814,53 @@ class server(socket_conn):
         fname = message['filename']
         owner_id = self.user_id  
         mode = message['types']
+        result = ''
+        if message['types'] == 'mac' :
+            if message['param1'].isdigit() and message['param2'].isdigit():
+                conf_label = int(message['param1'])
+                integ_label = int(message['param2'])
+                if (conf_label<= 4) and (conf_label >= 1) and (integ_label<= 4) and (integ_label >= 1): 
+                    self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID, mode  )
+                                            VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s, %(mode)s )""",
+                                        {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id, 'mode': mode})
+                    result = 'true'
+                else:
+                    result = 'mustBeDigit'
+            else:
+                result = 'mustBeDigit'
 
-        if message['types'] == 'blp' or message['types'] == 'biba':
-            conf_label = int(message['param1'])
-            integ_label = int(message['param2'])
-            self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID, mode  )
-                                    VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s, %(mode)s )""",
-                                {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id, 'mode': mode})
+        elif message['types'] == 'dac': 
+            if message['param1'].isdigit():
+                userID = int(message['param1'])
+                if self.check_user_exist(userID):
+                    list1 = ['x', 'w', 'r', 'rw', 'wr', 'rx', 'xr', 'xw',
+                            'wx', 'rwx', 'rxw', 'xwr', 'xrw', 'wxr', 'wrx', '-']
+                    if message['param2'] in list1:
+                        access = message['param2']
+                        stateResult = self.check_file_state(owner_id, fname, userID)
+                        if stateResult == 'addFileTodatabes' or stateResult == 'addUserAccess':
+                            self.cursor.execute(""" INSERT INTO files(fname, ownerID, userID, access, mode)
+                                                    VALUES(%(fname)s,%(owner_id)s,%(userID)s,%(access)s, %(mode)s)""",
+                                                {'fname': fname, 'userID': userID, 'access': access, 'owner_id': owner_id, 'mode': mode})
+                            if stateResult == 'addUserAccess':
+                                result = 'addAnotherUserAccess'
+                            else:
+                                result = 'true'
+                        elif stateResult == 'updateUserAccess':
+                            self.cursor.execute("""UPDATE files SET access = %(access)s WHERE fname = %(fname)s and ownerID = %(owner_id)s and userID = %(userID)s """,
+                                                {'fname': fname, 'userID': userID, 'access': access, 'owner_id': owner_id})
+                            result = 'updateUserAccess'
+                        elif stateResult == 'duplicateFile':
+                            result = 'duplicateFile'
+                    else:
+                        result = 'mustBeRightAccess'
 
-        elif message['types'] == 'dac': #FIXME: check access in range rwx
-            conf_label = int(message['param1'])
-            integ_label = message['param2']
-            self.cursor.execute(""" INSERT INTO files(fname, ownerID, userID, access, mode)
-                                    VALUES(%(fname)s,%(owner_id)s,%(userID)s,%(access)s, %(mode)s)""",
-                                {'fname': fname, 'userID': conf_label, 'access': integ_label, 'owner_id': owner_id, 'mode':mode})
-        
+                else:
+                    result = 'userNotExist'
+            else:
+                result = 'mustBeDigit'        
         self.mydb.commit()
+        return result
 
     def check_BLP_read(self, filename):
         self.cursor.execute(""" SELECT conf_label
@@ -899,8 +961,42 @@ class server(socket_conn):
         else:
             return False
 
+    def check_user_exist(self, ID):
+        self.cursor.execute(""" SELECT COUNT(*)
+                                FROM users
+                                WHERE ID = %(ID)s""", {'ID': ID})
 
+        file_table = self.cursor.fetchall()
+        if int(file_table[0][0]) == 1:
+            return True
+        else:
+            return False
 
+    def check_file_state(self, owner_id, fname, userID):
+        result = ''
+        self.cursor.execute(""" SELECT COUNT(*)
+                                FROM files
+                                WHERE fname = %(fname)s""", {'fname': fname})
+        file_table = self.cursor.fetchall()
+        if int(file_table[0][0]) > 0:
+            self.cursor.execute(""" SELECT COUNT(*)
+                                    FROM files
+                                    WHERE fname = %(fname)s and ownerID = %(ownerID)s""", {'fname': fname, 'ownerID':owner_id})
+            file_table = self.cursor.fetchall()
+            if int(file_table[0][0]) > 0:
+                self.cursor.execute(""" SELECT COUNT(*)
+                                        FROM files
+                                        WHERE fname = %(fname)s and ownerID = %(ownerID)s and userID = %(userID)s""", {'fname': fname, 'ownerID': owner_id, 'userID': userID})
+                file_table = self.cursor.fetchall()
+                if int(file_table[0][0]) == 0:
+                    result = 'addUserAccess'
+                else:
+                    result = 'updateUserAccess'
+            else:
+                result = 'duplicateFile'
+        else:
+            result = 'addFileTodatabes'
+        return result
 
 
 ##############################################################
