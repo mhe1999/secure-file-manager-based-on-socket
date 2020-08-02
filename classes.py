@@ -147,7 +147,6 @@ class socket_conn(cryptography):
         elif message['type'] == 'login_answer':
             self.handle_login_answer_command(message)
         elif message['type'] == 'put':
-            # FIXME: user input is name of BLP and BIBA levels, not number
             self.handle_put_command(message)
         elif message['type'] == 'put_answer':
             self.handle_put_answer_command(message)
@@ -200,10 +199,19 @@ class socket_conn(cryptography):
 
       
         elif type == 'put':
-            self.send_put_command(filename=message_array[1],
-                                  conf_label=message_array[2],
-                                  integrity_label=message_array[3])
-
+            if len(message_array) == 5:
+                self.send_put_command(filename=message_array[1],
+                                    param1=message_array[2], #conf or userid 
+                                    param2=message_array[3], #integr or access
+                                    types=message_array[4], #type (blp,biba),dac
+                                    status='correct' ) 
+            else:
+                self.send_put_command(filename='',
+                                    param1='',  
+                                    param2='', 
+                                    types='', 
+                                    status='wrong' ) 
+                
         # FIXME: for impelement DAC
 
       
@@ -257,14 +265,14 @@ class socket_conn(cryptography):
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
-    def send_put_command(self, filename, conf_label, integrity_label):
-        file = open(filename, 'rb')
-        content = self.base64_encode(file.read())
+    def send_put_command(self, filename, param1, param2, types, status):
         dic_message = {'type': 'put',
                        'filename': filename,
-                       'conf_label': conf_label,
-                       'integrity_label': integrity_label,
-                       'file': content}
+                       'param1': param1,
+                       'param2': param2,
+                       'types': types,
+                       'status': status,
+                       }
         json_message = json.dumps(dic_message)
         self.send_message(json_message)
 
@@ -527,18 +535,39 @@ class server(socket_conn):
 
 
     def handle_put_command(self, message):
+        #FIXME : log
         print('in put')
-        # FIXME: file name without .txt
-        if self.check_file_name(message['filename']):
-            file = open('serverFiles/' + message['filename'], 'wb')  # FIXME: file name without .txt
-            file.write(self.base64_decode(message['file']))
-            self.add_file_to_database(message)
-            answer_dic = {'type': 'put_answer',
-                          'content': 'File put in server successfully'}
+        if self.LoggedFlag == True:
+            if message['status'] == 'correct':
+                if os.path.isfile(message['filename']):
+                    if self.check_file_name(message['filename']): #check file duplicate
+                            file1 = open(message['filename'], 'rb')
+                            content = self.base64_encode(file1.read())
+                            file = open('serverFiles/' + message['filename'], 'wb') 
+                            file.write(self.base64_decode(content))
+                            self.add_file_to_database(message)
+                            answer_dic = {'type': 'put_answer',
+                                        'content': 'File put in server successfully'}
+
+                    else:
+                        answer_dic = {'type': 'put_answer',
+                                    'content': 'ERROR : Duplicated file'}
+                else:
+                    answer_dic = {'type': 'put_answer',
+                                'content': 'ERROR : no such file'}
+            else:
+                answer_dic = {'type': 'put_answer',
+                               'content': 'ERROR: invalid input, sample command: put <filename> <conf/userID> <integ/access> <<blp/biba>/dac>'}
+                self.invalidCommand_log(
+                    'put', self.LoggedUsername, self.ClientAddress)
+
         else:
-            print('duplicate name of file')
             answer_dic = {'type': 'put_answer',
-                          'content': 'ERROR : Duplicate name'}
+                           'content': 'ERROR: must be logged in'}
+            self.loginChecker_log(
+                'put', self.LoggedUsername, self.ClientAddress)
+
+
 
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
@@ -695,6 +724,8 @@ class server(socket_conn):
         self.send_message(content_json)
 
     def handle_invalid_command(self):
+        print('2injaaaaaaaaaaaaaaaaaaam')
+
         if self.LoggedFlag == False:
             content_dic = {'type': 'invalid_answer', 'content': 'invalid input, sample commands:\nlogin <username> <password>\nregister <username> <password> <conf.label> <integrity label>'}
             content_json = json.dumps(content_dic)
@@ -753,12 +784,14 @@ class server(socket_conn):
 
     def add_file_to_database(self, message):
         fname = message['filename']
-        conf_label = int(message['conf_label'])
-        integ_label = int(message['integrity_label'])
-        owner_id = self.user_id  # FIXME: owner_id = self.user_id
-        self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID)
-                                VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s)""",
-                            {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id})
+        if message['types'] == 'blp' or message['types'] == 'biba':
+            conf_label = int(message['param1'])
+            integ_label = int(message['param2'])
+            owner_id = self.user_id  
+            mode = message['types']
+            self.cursor.execute("""INSERT INTO files(fname, conf_label, integ_label, ownerID, mode  )
+                                    VALUES(%(fname)s , %(conf_label)s ,%(integ_label)s ,%(owner_id)s, %(mode)s )""",
+                                {'fname': fname, 'conf_label': conf_label, 'integ_label': integ_label, 'owner_id': owner_id, 'mode': mode})
         self.mydb.commit()
 
     def check_BLP_read(self, filename):
