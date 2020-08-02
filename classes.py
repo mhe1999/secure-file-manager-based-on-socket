@@ -383,8 +383,15 @@ class server(socket_conn):
         f.close()
 
 
+    def AccessDenied_log(self, type, uname, addr, fname):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'AccessDenied: ' + type + ' ' + fname + ', username: ' + uname + ', IP address: ' + \
+            str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+            ', @time: ' + str(current_time) + '\n'
 
-
+        f.write(msg)
+        f.close()
 
 
 
@@ -614,26 +621,29 @@ class server(socket_conn):
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
 
-    def handle_get_command(self, message):
-        
+
+    def handle_get_command(self, message):        
         if self.LoggedFlag == True:                
             print('in get')
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']):
-                    #FIXME: check if file not exist
-                    file = open(message['filename'], 'rb')
-                    content = file.read()
-                    content_base64 = self.base64_encode(content)
-                    content_dic = {'type': 'get_answer',
-                                'content': content_base64, 'filename': message['filename']}
-                    print('read successfully, sending data to client')
-                    self.get_log('read successfully, sending data to client',
-                                message['filename'], self.LoggedUsername, self.ClientAddress)
-
+                    if self.check_file_owner(message['filename'], self.LoggedUsername):
+                        file = open(message['filename'], 'rb')
+                        content = file.read()
+                        content_base64 = self.base64_encode(content)
+                        content_dic = {'type': 'get_answer',
+                                    'content': content_base64, 'filename': message['filename']}
+                        self.get_log('read successfully, sending data to client and reomve it from database',
+                                    message['filename'], self.LoggedUsername, self.ClientAddress)
                     
-                    # FIXME: delete file
-                    #FIXME : dont check who is owner
-
+                        self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {'fname': message['filename']})
+                        os.remove('serverFiles/' + message['filename'])
+                        self.mydb.commit()
+                    else:
+                        content_dic = {'type': 'get_answer',
+                                       'content': 'ERROR : Access denied for get this file'}
+                        
+                        self.AccessDenied_log('get', self.LoggedUsername, self.ClientAddress, message['filename'])
                 else:
                     content_dic = {'type': 'get_answer',
                                 'content': 'ERROR : no such file'}
@@ -839,7 +849,22 @@ class server(socket_conn):
         else:
             return resault[0][0]
 
+    def check_file_owner(self, filename, uname):
+        self.cursor.execute(""" SELECT users.uname
+                                FROM files inner join users on files.ownerID = users.ID
+                                WHERE fname = %(fname)s""", {'fname': filename})
 
+        file_table = self.cursor.fetchall()
+        if file_table[0][0] == uname:
+            return True
+        else:
+            return False
+
+
+
+
+
+##############################################################
 class clients(socket_conn):
     def __init__(self, conn, server_pubkey):
         super().__init__(conn, server_pubkey)
