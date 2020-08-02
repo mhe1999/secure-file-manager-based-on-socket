@@ -684,23 +684,47 @@ class server(socket_conn):
             print('in get')
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']):
-                    if self.check_file_owner(message['filename'], self.LoggedUsername):
-                        file = open(message['filename'], 'rb')
-                        content = file.read()
-                        content_base64 = self.base64_encode(content)
-                        content_dic = {'type': 'get_answer',
-                                    'content': content_base64, 'filename': message['filename']}
-                        self.get_log('read successfully, sending data to client and reomve it from database',
-                                    message['filename'], self.LoggedUsername, self.ClientAddress)
-                    
-                        self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {'fname': message['filename']})
-                        os.remove('serverFiles/' + message['filename'])
-                        self.mydb.commit()
-                    else:
-                        content_dic = {'type': 'get_answer',
-                                       'content': 'ERROR : Access denied for get this file'}
+                    controlAccess = self.file_controlAccess(message['filename'])
+                    if controlAccess == 'mac':
+                        if self.check_file_owner(message['filename'], self.LoggedUsername):
+                            file = open(message['filename'], 'rb')
+                            content = file.read()
+                            content_base64 = self.base64_encode(content)
+                            content_dic = {'type': 'get_answer',
+                                        'content': content_base64, 'filename': message['filename']}
+                            self.get_log('read successfully, sending data to client and reomve it from database',
+                                        message['filename'], self.LoggedUsername, self.ClientAddress)
                         
-                        self.AccessDenied_log('get', self.LoggedUsername, self.ClientAddress, message['filename'])
+                            self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {'fname': message['filename']})
+                            os.remove('serverFiles/' + message['filename'])
+                            self.mydb.commit()
+                        else:
+                            content_dic = {'type': 'get_answer',
+                                        'content': 'ERROR : Access denied for get this file'}
+                            
+                            self.AccessDenied_log('get', self.LoggedUsername, self.ClientAddress, message['filename'])
+                    elif controlAccess == 'dac':
+                        if self.check_file_access(message['filename'], self.user_id):
+                            file = open(message['filename'], 'rb')
+                            content = file.read()
+                            content_base64 = self.base64_encode(content)
+                            content_dic = {'type': 'get_answer',
+                                           'content': content_base64, 'filename': message['filename']}
+                            self.get_log('read successfully, sending data to client and reomve it from database',
+                                         message['filename'], self.LoggedUsername, self.ClientAddress)
+
+                            self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {
+                                                'fname': message['filename']})
+                            os.remove('serverFiles/' + message['filename'])
+                            self.mydb.commit()
+                        else:
+                            content_dic = {'type': 'get_answer',
+                                           'content': 'ERROR : Access denied for get this file'}
+
+                            self.AccessDenied_log(
+                                'get', self.LoggedUsername, self.ClientAddress, message['filename'])
+
+
                 else:
                     content_dic = {'type': 'get_answer',
                                 'content': 'ERROR : no such file'}
@@ -997,6 +1021,38 @@ class server(socket_conn):
         else:
             result = 'addFileTodatabes'
         return result
+
+    def file_controlAccess(self,fname):
+        self.cursor.execute(""" SELECT DISTINCT mode
+                                FROM files
+                                WHERE fname = %(fname)s""", {'fname': fname})
+        file_table = self.cursor.fetchall()
+        return file_table[0][0]
+
+    def check_file_access(self, fname, userID):
+        
+        self.cursor.execute(""" SELECT COUNT(*)
+                                FROM files
+                                WHERE fname = %(fname)s  and ownerID = %(ownerID)s""", {'fname': fname, 'ownerID':userID})
+        file_table = self.cursor.fetchall()
+        if int(file_table[0][0]) > 0:
+            return True
+ 
+        self.cursor.execute(""" SELECT COUNT(*)
+                                FROM files
+                                WHERE fname = %(fname)s and  userID = %(userID)s""", {'fname': fname,  'userID': userID})
+        file_table = self.cursor.fetchall()
+        if int(file_table[0][0]) == 1:
+            self.cursor.execute(""" SELECT access
+                                    FROM files
+                                    WHERE fname = %(fname)s and  userID = %(userID)s""", {'fname': fname,  'userID': userID})
+            file_table = self.cursor.fetchall()
+            if 'x' in file_table[0][0]:
+                return True
+            else:
+                return False
+        else:
+            return False
 
 
 ##############################################################
