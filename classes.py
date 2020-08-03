@@ -329,10 +329,9 @@ class server(socket_conn):
         self.LoggedFlag = False
         self.backoffCount = 0
         self.blockTime = 6
-        print(self.ClientAddress)
-    
-    def login_log(self,uname,status, addr):
+        self.analyze_functions()
 
+    def login_log(self,uname,status, addr):
         f = open("filemanager.log", "a")
         current_time = datetime.datetime.now()
         msg = 'Login: ' + status + ', username: ' + uname +  ', IP address: ' +  str(addr[0]) + ', Port Number: ' + str(addr[1]) +', @time: ' + str(current_time) + '\n'
@@ -1142,6 +1141,56 @@ class server(socket_conn):
                     return False
         else:
             return False
+
+    def analyze_controlAccess(self):
+        f = open("filemanager.log", "r")
+        myl = []
+        for x in f:
+            if x.split(":", 1)[0] == 'controlAccess':
+                if (x.split(",", 1)[0]).split("status: ", 1)[1] == 'unsuccess':
+                    myl.append((x.split("username: ", 1)[1]).split(',', 1)[0])
+
+                s = set(myl)
+                d = list()
+                for i in s:
+                    d.append([i, myl.count(i)])
+        for i in range(len(d)):
+            if d[i][1] > 3:
+                print('user: ' + d[i][0] + ', access denied ' +
+                    str(d[i][1]) + ' time,' + ' in controlAccess')
+        f.close()
+
+    def analyze_backoff(self):
+        f = open("filemanager.log", "r")
+        for x in f:
+            if x.split(",", 1)[0] == 'Login: backoff':
+                print(x)
+        f.close()
+
+    def analyze_putfile(self):
+        f = open("filemanager.log", "r")
+
+
+        myl = []
+        for x in f:
+            if x.split(",", 1)[0] == 'put: status: unsuccess ':
+                myl.append((x.split(',', 4)[3]).split(': ', 1)[1])
+                s = set(myl)
+                d = list()
+                for i in s:
+                    d.append([i, myl.count(i)])
+        for i in range(len(d)):
+            if d[i][1] > 0:
+                print('user: ' + d[i][0] + ', unsuccessful for put file, ' +
+                    str(d[i][1]) + ' time' )
+
+
+        f.close()
+
+    def analyze_functions(self):
+        self.analyze_controlAccess()
+        self.analyze_putfile()
+        self.analyze_backoff()
 
 ##############################################################
 class clients(socket_conn):
