@@ -8,7 +8,7 @@ import mysql.connector
 from mysql.connector import errorcode
 import passwordmeter
 import datetime
-
+import time
 
 class cryptography():
     def __init__(self, server_pubkey):
@@ -172,8 +172,9 @@ class socket_conn(cryptography):
 
     def send_message_handler(self, message):
         message_array = message.split()  # FIXME: file names with space
-
-        type = message_array[0]
+        type = ''
+        if len(message_array) > 0:
+            type = message_array[0]
         if type == 'register':
             if len(message_array) == 5:
                 self.send_register_command(status='correct',
@@ -326,6 +327,8 @@ class server(socket_conn):
         self.ClientAddress = ClientAddress
         self.LoggedUsername = ''
         self.LoggedFlag = False
+        self.backoffCount = 0
+        self.blockTime = 6
         print(self.ClientAddress)
     
     def login_log(self,uname,status, addr):
@@ -496,7 +499,7 @@ class server(socket_conn):
             self.LoggedUsername = uname  
             password = message['password']
 
-    #       temp =  self.check_possible_backoff(uname)
+            #posBack =  self.check_possible_backoff(uname)
             if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
                 print('login successfully')
                 print(self.user_id)
@@ -509,13 +512,22 @@ class server(socket_conn):
                 self.login_log(uname, 'Login successfully', self.ClientAddress)
 
             elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
-                answer_dic = {'type': 'login_answer',
-                            'content': 'ERROR : invalid username or password'}
-                print('invalid username or password')
+                self.backoffCount = self.backoffCount + 1
+                if self.backoffCount == 3:
+                    backtemp = 'ERROR : invalid username or password, try again in ' + str(self.blockTime) + ' second'
+                    answer_dic = {'type': 'login_answer',
+                                'content': backtemp}
+                else:
+                    answer_dic = {'type': 'login_answer',
+                                  'content': 'ERROR: invalid username or password'}
+
                 if (self.check_uname(uname)):
                     self.login_log(uname, 'Invalid username', self.ClientAddress)
                 else:
                     self.login_log(uname, 'Invalid password', self.ClientAddress)
+
+
+
     #        elif not temp == 'True':
     #           answer_dic = {'type': 'login_answer', 'content': temp}
     #          print('wait', temp, 'to try again')
@@ -526,8 +538,6 @@ class server(socket_conn):
     #           print('invalid password')
     #          self.update_login_backoff(uname)
 
-            answer_json = json.dumps(answer_dic)
-            self.send_message(answer_json)
 
         else:
             answer_dic = {'type': 'login_answer',
@@ -535,8 +545,12 @@ class server(socket_conn):
 
             self.invalidCommand_log(
                 'login', self.LoggedUsername, self.ClientAddress)
-            answer_json = json.dumps(answer_dic)
-            self.send_message(answer_json)
+        answer_json = json.dumps(answer_dic)
+        self.send_message(answer_json)
+        if self.backoffCount == 3:
+            self.backoff()
+
+
 
 
     def handle_put_command(self, message):
@@ -608,7 +622,7 @@ class server(socket_conn):
 
                     if controlAccess == 'mac':
                         if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
-                            file = open(message['filename'], 'rb')
+                            file = open('serverFiles/' + message['filename'], 'rb')
                             content = file.read()
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'read_answer', 'content': content_base64}
@@ -628,7 +642,7 @@ class server(socket_conn):
 
                     elif controlAccess == 'dac':
                         if self.check_file_access('read', message['filename'], self.user_id):
-                            file = open(message['filename'], 'rb')
+                            file = open('serverFiles/' + message['filename'], 'rb')
                             content = file.read()
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'read_answer',
@@ -667,7 +681,7 @@ class server(socket_conn):
                     controlAccess = self.file_controlAccess(message['filename'])
                     if controlAccess == 'mac':
                         if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
-                            file = open(message['filename'], 'wt')
+                            file = open('serverFiles/' + message['filename'], 'wt')
                             file.write(message['content'])
                             print('write successfully')
                             content_dic = {'type': 'write_answer',
@@ -686,7 +700,7 @@ class server(socket_conn):
                                         'content': 'ERROR : not BLP authorize'}
                     elif controlAccess == 'dac':
                         if self.check_file_access('write', message['filename'], self.user_id):
-                            file = open(message['filename'], 'wt')
+                            file = open('serverFiles/' + message['filename'], 'wt')
                             file.write(message['content'])
                             print('write successfully')
                             content_dic = {'type': 'write_answer',
@@ -797,7 +811,6 @@ class server(socket_conn):
             else:
                 content_dic = {'type': 'ls_answer',
                             'content': 'ERROR: invalid input, sample command: ls'}
-
                 self.invalidCommand_log(
                     'ls', self.LoggedUsername, self.ClientAddress)
 
@@ -810,8 +823,6 @@ class server(socket_conn):
         self.send_message(content_json)
 
     def handle_invalid_command(self):
-        print('2injaaaaaaaaaaaaaaaaaaam')
-
         if self.LoggedFlag == False:
             content_dic = {'type': 'invalid_answer', 'content': 'invalid input, sample commands:\nlogin <username> <password>\nregister <username> <password> <conf.label> <integrity label>'}
             content_json = json.dumps(content_dic)
@@ -1008,6 +1019,14 @@ class server(socket_conn):
         else:
             return resault[0][0]
 
+    def backoff(self):
+        self.backoffCount = 0
+        time.sleep(self.blockTime)
+        self.blockTime = self.blockTime + self.blockTime
+
+
+
+
     def check_file_owner(self, filename, uname):
         self.cursor.execute(""" SELECT users.uname
                                 FROM files inner join users on files.ownerID = users.ID
@@ -1118,8 +1137,8 @@ class clients(socket_conn):
             print(message['content'])
         else:                
             print('file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
-                'confidentiality'.ljust(15), '|', 'integiry'.ljust(20))
-            print('-'*68)
+                  'confidentiality'.ljust(15), '|', 'integiry'.ljust(15), '|', 'userID'.ljust(10), '|', 'access'.ljust(5), '|', 'access mode'.ljust(5))
+            print('-'*100)
             for row in message['content']:
                 print(row[0].ljust(20), '|', row[1].ljust(10),
                     '|', row[2].ljust(15), '|', row[3].ljust(20))
@@ -1147,6 +1166,8 @@ class clients(socket_conn):
 
     def handle_invalid_answer_command(self,message):
         print(message['content'])
+
+
 
 class files():
     pass
