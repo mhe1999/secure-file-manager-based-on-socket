@@ -14,7 +14,7 @@ server_pubkey = rsa.PublicKey(int('''198710545728042830253499635501841987346
 9096433733507311626064586608627154087661325313'''.replace('\n', '')), 65537)
 
 HOST = '127.0.0.1'  # The server's hostname or IP address
-PORT = 65433        # The port used by the server
+PORT = 65438        # The port used by the server
 
 # client_crypto = cryptography(server_pubkey = server_pubkey)
 # client_socket = socket()
