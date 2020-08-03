@@ -475,47 +475,50 @@ class server(socket_conn):
                 salt = self.base64_encode(os.urandom(12))
                 # returns a string of password + salt
                 password = message['password'] + salt
-                conf_label = int(message['conf_label'])
-                integrity_label = int(message['integrity_label'])
-                if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
-                    self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
-                                                    VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
-                                        {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
-                    self.mydb.commit()
-                    answer_dic = {'type': 'register_answer',
-                                'content': 'register successfully'}
-                    self.register_log(uname, 'Successful Register', self.ClientAddress)
+                if message['conf_label'].isdigit() and message['conf_label'].isdigit():
+                    conf_label = int(message['conf_label'])            
+                    integrity_label = int(message['integrity_label'])
+                    
+                    if self.check_uname(uname) and self.check_pass_register(uname, message['password']):
+                        self.cursor.execute("""INSERT INTO users(uname, pass_hash, salt, conf_label, integ_label, number_of_attempts, block_time, is_block)
+                                                        VALUES(%(uname)s , sha2(%(password)s, 256) ,%(salt)s ,%(conf_label)s ,%(integ_label)s ,0 ,NULL, 0)""",
+                                            {'uname': uname, 'password': password, 'salt': salt, 'conf_label': conf_label, 'integ_label': integrity_label})
+                        self.mydb.commit()
+                        answer_dic = {'type': 'register_answer',
+                                    'content': 'register successfully'}
+                        self.register_log(uname, 'Successful Register', self.ClientAddress)
 
-                elif not self.check_uname(uname):
-                    print('duplicate user name')
-                    answer_dic = {'type': 'register_answer',
-                                'content': 'ERROR : duplicate user name'}
-                    self.register_log(uname, 'Unsuccessful Register duplicate username', self.ClientAddress)
+                    elif not self.check_uname(uname):
+                        print('duplicate user name')
+                        answer_dic = {'type': 'register_answer',
+                                    'content': 'ERROR : duplicate user name'}
+                        self.register_log(uname, 'Unsuccessful, Register duplicate username', self.ClientAddress)
+
+                    else:
+                        answer_dic = {'type': 'register_answer',
+                                    'content': 'ERROR : weak password'}
+                        self.register_log(uname, 'Unsuccessful, Register weak password', self.ClientAddress)
 
                 else:
-                    print('weak password')
                     answer_dic = {'type': 'register_answer',
-                                'content': 'ERROR : weak password'}
-                    self.register_log(uname, 'Unsuccessful Register weak password', self.ClientAddress)
-                answer_json = json.dumps(answer_dic)
-                self.send_message(answer_json)
+                                  'content': 'ERROR : conf and itegrity must be digit'}
+                    self.register_log(
+                        uname, 'Unsuccessful, Register invalid digit', self.ClientAddress)
 
             else:
                 answer_dic = {'type': 'register_answer',
                               'content': 'ERROR : invalid input, sample command: register <username> <password> <conf.label> <integrity label>'}
                 self.invalidCommand_log('register', self.LoggedUsername, self.ClientAddress)
-                answer_json = json.dumps(answer_dic)
-                self.send_message(answer_json)
-
 
 
         else:
             print('first must logout')
             answer_dic = {'type': 'register_answer',
                           'content': 'ERROR : You must log out before you can register'}
-            answer_json = json.dumps(answer_dic)
             self.loginChecker_log('register', self.LoggedUsername, self.ClientAddress)
-            self.send_message(answer_json)
+
+        answer_json = json.dumps(answer_dic)
+        self.send_message(answer_json)
 
 
 
@@ -823,10 +826,7 @@ class server(socket_conn):
     def handle_ls_command(self,message):
         if self.LoggedFlag == True:                
             if message['status'] == 'correct':
-                self.cursor.execute("""SELECT f.fname , u.uname, conf.conf_name, integrity.integ_name
-                                    FROM users as u inner join files as f on(u.ID = f.ownerID)
-                                    inner join conf on(f.conf_label = conf.ID)
-                                    inner join integrity on (f.integ_label = integrity.ID)""")
+                self.cursor.execute("""select fname, integ_name, conf_name, s.uname, userID, access, mode from files left join integrity  on (files.integ_label = integrity.ID) left join conf on (conf.ID = files.conf_label) left join users as s on (s.ID = ownerID)""")
                 self.ls_log(self.LoggedUsername, self.ClientAddress)
                 content_dic = {'type': 'ls_answer', 'content': self.cursor.fetchall()}
                 content_json = json.dumps(content_dic)
@@ -1159,12 +1159,18 @@ class clients(socket_conn):
         if 'ERROR' in message['content']:
             print(message['content'])
         else:                
-            print('file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
-                  'confidentiality'.ljust(15), '|', 'integiry'.ljust(15), '|', 'userID'.ljust(10), '|', 'access'.ljust(5), '|', 'access mode'.ljust(5))
+            print('|','file name'.ljust(20), '|', 'owner name'.ljust(10), '|',
+                  'confidentiality'.ljust(15), '|', 'integiry'.ljust(15), '|', 'userID'.ljust(10), '|', 'access'.ljust(5), '|', 'access mode'.ljust(5),'|')
             print('-'*100)
             for row in message['content']:
-                print(row[0].ljust(20), '|', row[1].ljust(10),
-                    '|', row[2].ljust(15), '|', row[3].ljust(20))
+                if row[2] is None:
+                    row[2] = '*'
+                    row[1] = '*'
+                if row[4] is None:
+                    row[4] = '*'
+                    row[5] = '*'
+                print('|',row[0].ljust(20), '|', row[3].ljust(10),
+                      '|', row[2].ljust(15), '|', row[1].ljust(15), '|', str(row[4]).ljust(10),'|',row[5].ljust(5),'|',row[6].ljust(5),'|')
 
     def handle_register_answer_command(self, message):
         print(message['content'])
