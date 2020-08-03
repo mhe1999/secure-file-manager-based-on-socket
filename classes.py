@@ -633,7 +633,6 @@ class server(socket_conn):
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'read_answer',
                                            'content': content_base64}
-                            print('read successfully, sending data to client DAC')
                         else:
                             content_dic = {'type': 'read_answer',
                                            'content': 'ERROR : Access denied for read'}
@@ -662,29 +661,43 @@ class server(socket_conn):
 
 
     def handle_write_command(self, message):  # FIXME: messages with spaces
-        #FIXME : biba and blp logs
-        print('in write')
         if self.LoggedFlag == True:
             if message['status'] == 'correct':
-                if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
-                    file = open(message['filename'], 'wt')
-                    file.write(message['content'])
-                    print('write successfully')
-                    content_dic = {'type': 'write_answer',
-                                'content': 'writing in file done successfully'}
-                elif self.check_file_name(message['filename']):
-                    print('no such file')
-                    content_dic = {'type': 'write_answer',
-                                'content': 'ERROR : no such file'}
-                elif not self.check_BIBA_write(message['filename']):
-                    print('no such file')
-                    content_dic = {'type': 'write_answer',
-                                'content': 'ERROR : not BIBA authorize'}
-                elif self.check_BLP_write(message['filename']):
-                    print('no such file')
-                    content_dic = {'type': 'write_answer',
-                                'content': 'ERROR : not BLP authorize'}
+                if not self.check_file_name(message['filename']):
+                    controlAccess = self.file_controlAccess(message['filename'])
+                    if controlAccess == 'mac':
+                        if not self.check_file_name(message['filename']) and self.check_BLP_write(message['filename']) and self.check_BIBA_write(message['filename']):
+                            file = open(message['filename'], 'wt')
+                            file.write(message['content'])
+                            print('write successfully')
+                            content_dic = {'type': 'write_answer',
+                                        'content': 'writing in file done successfully'}
+                        elif self.check_file_name(message['filename']):
+                            print('no such file')
+                            content_dic = {'type': 'write_answer',
+                                        'content': 'ERROR : no such file'}
+                        elif not self.check_BIBA_write(message['filename']):
+                            print('no such file')
+                            content_dic = {'type': 'write_answer',
+                                        'content': 'ERROR : not BIBA authorize'}
+                        elif self.check_BLP_write(message['filename']):
+                            print('no such file')
+                            content_dic = {'type': 'write_answer',
+                                        'content': 'ERROR : not BLP authorize'}
+                    elif controlAccess == 'dac':
+                        if self.check_file_access('write', message['filename'], self.user_id):
+                            file = open(message['filename'], 'wt')
+                            file.write(message['content'])
+                            print('write successfully')
+                            content_dic = {'type': 'write_answer',
+                                        'content': 'writing in file done successfully'}
+                        else:
+                            content_dic = {'type': 'write_answer',
+                                           'content': 'ERROR : Access denied for write'}
 
+                else:
+                    content_dic = {'type': 'get_answer',
+                                   'content': 'ERROR : no such file'}
             else:
                 content_dic = {'type': 'write_answer',
                                'content': 'ERROR: invalid input, sample command: write <filename> <content>'}
