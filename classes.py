@@ -386,12 +386,12 @@ class server(socket_conn):
         f = open("filemanager.log", "a")
         current_time = datetime.datetime.now()
         if uname == '':
-            msg = 'commandParameters: ' + type + ', IP address: ' + \
+            msg = 'invalidCommand: ' + type + ', IP address: ' + \
                 str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
                 ', @time: ' + str(current_time) + '\n'
 
         else:
-            msg = 'commandParameters: ' + type + ', username: ' + uname + ', IP address: ' + \
+            msg = 'invalidCommand: ' + type + ', username: ' + uname + ', IP address: ' + \
                 str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
                 ', @time: ' + str(current_time) + '\n'
 
@@ -410,7 +410,36 @@ class server(socket_conn):
         f.close()
 
 
+    def controlAccess_log(self, status, types, CAmode, fname,uname, addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'controlAccess: status: ' + status + ', type: ' +types + ', CA: ' + CAmode + ', filename: ' +fname + ', username: ' + uname + ', IP address: ' + \
+            str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+            ', @time: ' + str(current_time) + '\n'
 
+        f.write(msg)
+        f.close()
+
+
+    def noFile_log(self, types, CAmode, fname, uname, addr):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'noSuchFile: type: ' + types + ', CA: ' + CAmode + ', filename: ' + fname + ', username: ' + uname + ', IP address: ' + \
+            str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+            ', @time: ' + str(current_time) + '\n'
+
+        f.write(msg)
+        f.close()
+
+    def put_log(self, status, fname, uname, addr ):
+        f = open("filemanager.log", "a")
+        current_time = datetime.datetime.now()
+        msg = 'put: status: ' + status + ', filename: ' + fname + ', username: ' + uname + ', IP address: ' + \
+            str(addr[0]) + ', Port Number: ' + str(addr[1]) + \
+            ', @time: ' + str(current_time) + '\n'
+
+        f.write(msg)
+        f.close()
 
 
     def database_connection(self):
@@ -472,7 +501,6 @@ class server(socket_conn):
                 self.send_message(answer_json)
 
             else:
-                print('wrong parameters')
                 answer_dic = {'type': 'register_answer',
                               'content': 'ERROR : invalid input, sample command: register <username> <password> <conf.label> <integrity label>'}
                 self.invalidCommand_log('register', self.LoggedUsername, self.ClientAddress)
@@ -498,8 +526,6 @@ class server(socket_conn):
             uname = message['uname']
             self.LoggedUsername = uname  
             password = message['password']
-
-            #posBack =  self.check_possible_backoff(uname)
             if (not self.check_uname(uname)) and (self.check_pass_login(uname, password)):
                 print('login successfully')
                 print(self.user_id)
@@ -509,7 +535,7 @@ class server(socket_conn):
                 answer_dic = {'type': 'login_answer',
                             'content': 'Login successfully'}
                 self.LoggedFlag = True
-                self.login_log(uname, 'Login successfully', self.ClientAddress)
+                self.login_log(uname, 'success', self.ClientAddress)
 
             elif (self.check_uname(uname)) or (not self.check_pass_login(uname, password)):
                 self.backoffCount = self.backoffCount + 1
@@ -517,34 +543,20 @@ class server(socket_conn):
                     backtemp = 'ERROR : invalid username or password, try again in ' + str(self.blockTime) + ' second'
                     answer_dic = {'type': 'login_answer',
                                 'content': backtemp}
+                    self.login_log(uname, 'backoff', self.ClientAddress)
+
                 else:
                     answer_dic = {'type': 'login_answer',
                                   'content': 'ERROR: invalid username or password'}
-
                 if (self.check_uname(uname)):
                     self.login_log(uname, 'Invalid username', self.ClientAddress)
                 else:
                     self.login_log(uname, 'Invalid password', self.ClientAddress)
-
-
-
-    #        elif not temp == 'True':
-    #           answer_dic = {'type': 'login_answer', 'content': temp}
-    #          print('wait', temp, 'to try again')
-
-    #        elif not self.check_pass_login(uname, password):
-    #            answer_dic = {'type': 'login_answer',
-    #                          'content': 'ERROR : invalid password'}
-    #           print('invalid password')
-    #          self.update_login_backoff(uname)
-
-
         else:
             answer_dic = {'type': 'login_answer',
                           'content': 'ERROR: invalid input, sample command: login <username> <password>'}
-
-            self.invalidCommand_log(
-                'login', self.LoggedUsername, self.ClientAddress)
+            self.invalidCommand_log('login', self.LoggedUsername, self.ClientAddress)
+        
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
         if self.backoffCount == 3:
@@ -554,8 +566,6 @@ class server(socket_conn):
 
 
     def handle_put_command(self, message):
-        #FIXME : log
-        
         if self.LoggedFlag == True:
             if message['status'] == 'correct':
                 if os.path.isfile(message['filename']):#check file exist
@@ -568,49 +578,67 @@ class server(socket_conn):
                             if result == 'mustBeDigit':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'ERROR: put command sample :\nput <filename> <conf(int)(int 1<= <=4)> <integ(int 1<= <=4)> mac (optional)\nput <filename> <userID(int)> <access> dac'}
+                                self.put_log(
+                                    'unsuccess ,invalid digit', message['filename'], self.LoggedUsername, self.ClientAddress)
+                            
                             elif result == 'mustBeRightAccess':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'ERROR: put command sample :\nput <filename> <userID> <access(in rang rwx,- )> dac'}
+                                self.put_log(
+                                    'unsuccess ,invalid access', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                             elif result == 'userNotExist':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'ERROR: user not exist'}
+                                self.put_log(
+                                    'unsuccess ,user not exist', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                             elif result == 'duplicateFile':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'ERROR: duplicated file'}
+                                self.put_log(
+                                    'unsuccess , duplicate file', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                             elif result == 'addAnotherUserAccess':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'add access for this user'}
+                                self.put_log('success , add access to user', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                             elif result == 'updateUserAccess':
                                 answer_dic = {'type': 'put_answer',
                                               'content': 'change access for this user'}
+                                self.put_log('success, update user access', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                             else:    
                                 if message['types'] == 'dac' or message['types'] == 'mac':
                                     answer_dic = {'type': 'put_answer',
                                                 'content': 'File put in server successfully'}
+                                    self.put_log('success ,add file to server', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                                 else:
                                     answer_dic = {'type': 'put_answer',
                                                   'content': 'ERROR: put command sample :\nput <filename> <conf> <integ> mac (optional)\nput <filename> <userID> <access> dac'}
+                                    self.put_log(
+                                        'unsuccess ,invalid digit', message['filename'], self.LoggedUsername, self.ClientAddress)
 
                     else:
                         answer_dic = {'type': 'put_answer',
                                     'content': 'ERROR : Duplicated file'}
+                        self.put_log('unsuccess , duplicated file', message['filename'], self.LoggedUsername, self.ClientAddress)
+
                 else:
                     answer_dic = {'type': 'put_answer',
                                 'content': 'ERROR : no such file'}
+                    self.noFile_log('put', message['types'], message['filename'], self.LoggedUsername, self.ClientAddress)
             else:
                 answer_dic = {'type': 'put_answer',
                               'content': 'ERROR: invalid input, sample command:\nput <filename> <conf/userID> <integ/access> <<blp/biba>/dac>'}
                 self.invalidCommand_log(
                     'put', self.LoggedUsername, self.ClientAddress)
-
         else:
             answer_dic = {'type': 'put_answer',
                            'content': 'ERROR: must be logged in'}
-            self.loginChecker_log(
-                'put', self.LoggedUsername, self.ClientAddress)
-
-
-
+            self.loginChecker_log('put', self.LoggedUsername, self.ClientAddress)
         answer_json = json.dumps(answer_dic)
         self.send_message(answer_json)
 
@@ -619,27 +647,25 @@ class server(socket_conn):
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']):
                     controlAccess = self.file_controlAccess(message['filename'])
-
                     if controlAccess == 'mac':
                         if not self.check_file_name(message['filename']) and self.check_BLP_read(message['filename']) and self.check_BIBA_read(message['filename']):
                             file = open('serverFiles/' + message['filename'], 'rb')
                             content = file.read()
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'read_answer', 'content': content_base64}
-                            print('read successfully, sending data to client')
-                        elif self.check_file_name(message['filename']):
-                            print('no such file')
-                            content_dic = {'type': 'read_answer',
-                                        'content': 'ERROR : no such file'}
+                            self.controlAccess_log('success', 'read', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
+
                         elif not self.check_BLP_read(message['filename']):
                             print('not BLP authorize')
                             content_dic = {'type': 'read_answer',
                                         'content': 'ERROR : not BLP authorize'}
+                            self.controlAccess_log('unsuccess', 'read', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                         elif not self.check_BIBA_read(message['filename']):
                             print('not BIBA authorize')
                             content_dic = {'type': 'read_answer',
                                         'content': 'ERROR : not BIBA authorize'}
-
+                            self.controlAccess_log(
+                                'unsuccess', 'read', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                     elif controlAccess == 'dac':
                         if self.check_file_access('read', message['filename'], self.user_id):
                             file = open('serverFiles/' + message['filename'], 'rb')
@@ -647,34 +673,29 @@ class server(socket_conn):
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'read_answer',
                                            'content': content_base64}
+                            self.controlAccess_log(
+                                'success', 'read', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
+
                         else:
                             content_dic = {'type': 'read_answer',
                                            'content': 'ERROR : Access denied for read'}
-
+                            self.controlAccess_log('unsuccess', 'read', controlAccess, message['filename'],self.LoggedUsername, self.ClientAddress)
                 else:
                     content_dic = {'type': 'get_answer',
                                    'content': 'ERROR : no such file'}
-
-                    #log file
+                    self.noFile_log('read', '', message['filename'], self.LoggedUsername, self.ClientAddress)
             else:
-                #FIXME:add log
-                content_dic = {'type': 'read_answer',
-                               'content': 'ERROR: invalid input, sample command: read <filename>'}       
-                self.invalidCommand_log(
-                    'read', self.LoggedUsername, self.ClientAddress)
-
+                content_dic = {'type': 'read_answer', 'content': 'ERROR: invalid input, sample command: read <filename>'}       
+                self.invalidCommand_log('read', self.LoggedUsername, self.ClientAddress)
         else:
-            content_dic = {'type': 'read_answer',
-                           'content': 'ERROR: must be logged in'}
-            self.loginChecker_log(
-                'read', self.LoggedUsername, self.ClientAddress)
-
-
+            content_dic = {'type': 'read_answer', 'content': 'ERROR: must be logged in'}
+            self.loginChecker_log('read', self.LoggedUsername, self.ClientAddress)
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
 
 
     def handle_write_command(self, message):  # FIXME: messages with spaces
+        #content_dic = {}
         if self.LoggedFlag == True:
             if message['status'] == 'correct':
                 if not self.check_file_name(message['filename']):
@@ -686,18 +707,18 @@ class server(socket_conn):
                             print('write successfully')
                             content_dic = {'type': 'write_answer',
                                         'content': 'writing in file done successfully'}
-                        elif self.check_file_name(message['filename']):
-                            print('no such file')
-                            content_dic = {'type': 'write_answer',
-                                        'content': 'ERROR : no such file'}
+                            self.controlAccess_log(
+                                'success', 'write', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                         elif not self.check_BIBA_write(message['filename']):
-                            print('no such file')
                             content_dic = {'type': 'write_answer',
                                         'content': 'ERROR : not BIBA authorize'}
-                        elif self.check_BLP_write(message['filename']):
-                            print('no such file')
+                            self.controlAccess_log(
+                                'unsuccess', 'write', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
+                        elif not self.check_BLP_write(message['filename']):
                             content_dic = {'type': 'write_answer',
                                         'content': 'ERROR : not BLP authorize'}
+                            self.controlAccess_log(
+                                'unsuccess', 'write', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                     elif controlAccess == 'dac':
                         if self.check_file_access('write', message['filename'], self.user_id):
                             file = open('serverFiles/' + message['filename'], 'wt')
@@ -705,28 +726,33 @@ class server(socket_conn):
                             print('write successfully')
                             content_dic = {'type': 'write_answer',
                                         'content': 'writing in file done successfully'}
+                            self.controlAccess_log(
+                                'success', 'write', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                         else:
                             content_dic = {'type': 'write_answer',
                                            'content': 'ERROR : Access denied for write'}
-
+                            self.controlAccess_log(
+                                'unsuccess', 'write', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                 else:
-                    content_dic = {'type': 'get_answer',
+                    content_dic = {'type': 'write_answer',
                                    'content': 'ERROR : no such file'}
+                    self.noFile_log(
+                        'write', '', message['filename'], self.LoggedUsername, self.ClientAddress)
             else:
                 content_dic = {'type': 'write_answer',
                                'content': 'ERROR: invalid input, sample command: write <filename> <content>'}
                 self.invalidCommand_log(
                     'write', self.LoggedUsername, self.ClientAddress)
-
         else:
             print('must be logged in')
             content_dic = {'type': 'write_answer',
                            'content': 'ERROR: must be logged in'}
             self.loginChecker_log(
                 'write', self.LoggedUsername, self.ClientAddress)
+
+
         content_json = json.dumps(content_dic)
         self.send_message(content_json)
-
 
     def handle_get_command(self, message):        
         if self.LoggedFlag == True:                
@@ -740,17 +766,16 @@ class server(socket_conn):
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'get_answer',
                                         'content': content_base64, 'filename': message['filename']}
-                            self.get_log('read successfully, sending data to client and reomve it from database',
-                                        message['filename'], self.LoggedUsername, self.ClientAddress)
-                        
+                            self.controlAccess_log(
+                                'success', 'get', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                             self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {'fname': message['filename']})
                             os.remove('serverFiles/' + message['filename'])
                             self.mydb.commit()
                         else:
                             content_dic = {'type': 'get_answer',
                                         'content': 'ERROR : Access denied for get this file'}
-                            
-                            self.AccessDenied_log('get', self.LoggedUsername, self.ClientAddress, message['filename'])
+                            self.controlAccess_log(
+                                'unsuccess', 'get', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                     elif controlAccess == 'dac':
                         if self.check_file_access('get',message['filename'], self.user_id):
                             file = open(message['filename'], 'rb')
@@ -758,9 +783,8 @@ class server(socket_conn):
                             content_base64 = self.base64_encode(content)
                             content_dic = {'type': 'get_answer',
                                            'content': content_base64, 'filename': message['filename']}
-                            self.get_log('read successfully, sending data to client and reomve it from database',
-                                         message['filename'], self.LoggedUsername, self.ClientAddress)
-
+                            self.controlAccess_log(
+                                'success', 'get', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
                             self.cursor.execute(""" DELETE FROM files WHERE fname = %(fname)s""", {
                                                 'fname': message['filename']})
                             os.remove('serverFiles/' + message['filename'])
@@ -768,17 +792,16 @@ class server(socket_conn):
                         else:
                             content_dic = {'type': 'get_answer',
                                            'content': 'ERROR : Access denied for get this file'}
-
-                            self.AccessDenied_log(
-                                'get', self.LoggedUsername, self.ClientAddress, message['filename'])
+                            self.controlAccess_log(
+                                'unsuccess', 'get', controlAccess, message['filename'], self.LoggedUsername, self.ClientAddress)
 
 
                 else:
                     content_dic = {'type': 'get_answer',
                                 'content': 'ERROR : no such file'}
-                    self.get_log('no such file',
-                                message['filename'], self.LoggedUsername, self.ClientAddress)
-                    
+                    self.noFile_log(
+                        'put', '', message['filename'], self.LoggedUsername, self.ClientAddress)
+
 
             else:
                 content_dic = {'type': 'get_answer',
