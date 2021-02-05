@@ -21,32 +21,24 @@ CREATE TABLE users(
 	foreign key (integ_label) references integrity(ID)
 );
 
+
 CREATE TABLE files(
-	ID int primary key auto_increment,
-    fname varchar(40),
-    conf_label int,
-    integ_label int,
+	ID int auto_increment ,
+    fname varchar(40) ,
+    conf_label int default null,
+    integ_label int default null,
     ownerID int,
+    access varchar(3) default null,
+    userID int default null,
+    mode varchar(4),
+    PRIMARY KEY (ID),
 	foreign key (ownerID) references users(ID),
     foreign key (conf_label) references conf(ID),
+	foreign key (userID) references users(ID),
 	foreign key (integ_label) references integrity(ID)
 );
 
-CREATE TABLE DAC(
-	ownerID int,
-    userID int,
-    fileID int,
-    access int,
-	foreign key (access) references access_type(ID),
-	foreign key (fileID) references files(ID),
-	foreign key (ownerID) references users(ID),
-	foreign key (userID) references users(ID)
-);
 
-CREATE TABLE access_type(
-	ID int primary key,
-    type_name varchar(10)
-);
 
 INSERT INTO conf(ID, conf_name) values
 				(1 , 'Unclassified'),
@@ -59,11 +51,6 @@ INSERT INTO integrity(ID, integ_name) values
                 (2 , 'SlightlyTrusted'),
                 (3 , 'Trusted'),
                 (4 , 'VeryTrusted');
-                
-INSERT INTO access_type(ID, type_name) values
-				(1 , 'read'),
-                (2 , 'write'),
-                (3 , 'get');
                 
                 
 
